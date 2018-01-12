@@ -1,3 +1,5 @@
+#Fix the mix-match between the periodic grid using in VASP and the general grid in wannier90
+
 for files in `/bin/ls $RUNNAME*xsf`; do
 oldx1=`cat $files | grep -A2 'BEGIN_DATAGRID' | tail -1 | awk '{ print $1 }'`
 cell1=`cat $files | grep -A1 'CONVVEC' | tail -1 | awk '{ print $1 }'`
