@@ -1,6 +1,6 @@
 # pyWannier90: A python/C++ wrapper for Wannier90 
 
-![alt text](https://github.com/hungpham2017/pyWannier90/blob/master/doc/Polyyens.png)
+![alt text](https://github.com/hungpham2017/pyWannier90/blob/master/doc/Polyyens.png =250x250)
 
 ### How to compile pyWannier90
  - Required: gxx, cmake, pybind11, gfortran
