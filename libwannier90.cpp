@@ -15,7 +15,7 @@ email: pqh3.14@gmail.com
 
 extern "C" {
 	
-	void __w90_MOD_wannier_setup(char* seed__name, int* mp_grid_loc, int* num_kpts_loc,						//input
+	void __w90lib_MOD_wannier_setup(char* seed__name, int* mp_grid_loc, int* num_kpts_loc,						//input
      double* real_lattice_loc, double* recip_lattice_loc, double* kpt_latt_loc,								//input
 	 int* num_bands_tot, int* num_atoms_loc, int* atom_atomic_loc, double* atoms_cart_loc, 					//input
 	 int* gamma_only_boolean, int* spinors_boolean, 														//input
@@ -24,7 +24,7 @@ extern "C" {
 	 double* proj_x_loc, double* proj_zona_loc, int* exclude_bands_loc, int* proj_s_loc, 					//output
 	 double* proj_s_qaxis_loc);
 
-	void __w90_MOD_wannier_run(char* seed__name, int* mp_grid_loc, int* num_kpts_loc, double* real_lattice_loc, 					//input
+	void __w90lib_MOD_wannier_run(char* seed__name, int* mp_grid_loc, int* num_kpts_loc, double* real_lattice_loc, 					//input
 	double* recip_lattice_loc, double* kpt_latt_loc, int* num_bands_tot, int* num_bands_loc, int* num_wann_loc, int* nntot_loc, 	//input
 	int* num_atoms_loc, int* atom_atomic_loc, double* atoms_cart_loc, int* gamma_only_boolean, 										//input
 	std::complex<double>* M_matrix_loc, std::complex<double>* A_matrix_loc, double* eigenvalues_loc, 								//input
@@ -89,7 +89,7 @@ std::vector<py::array_t<double>> setup(char* seed__name, py::array_t<int> mp_gri
 	// Call wannier_setup//
 	///////////////////////	
 	
-	__w90_MOD_wannier_setup(seed__name, mp_grid, num_kpts_loc, real_lattice, recip_lattice, kpt_latt, 			//input						
+	__w90lib_MOD_wannier_setup(seed__name, mp_grid, num_kpts_loc, real_lattice, recip_lattice, kpt_latt, 			//input						
 	 num_bands_tot, num_atoms_loc, atom_atomic, atoms_cart, gamma_only_boolean, spinors_boolean, 	 			//input															
 	 nntot_loc, nnlist_loc, nncell_loc, num_bands_loc, num_wann_loc, 				 							//output
 	 proj_site_loc, proj_l_loc, proj_m_loc, proj_radial_loc, proj_z_loc, 										//output
@@ -313,7 +313,7 @@ std::vector<py::array_t<std::complex<double>>> run(char* seed__name, py::array_t
 	// Call wannier_run//
 	/////////////////////
 	
-	__w90_MOD_wannier_run(seed__name, mp_grid, num_kpts_loc, real_lattice, 							    //input
+	__w90lib_MOD_wannier_run(seed__name, mp_grid, num_kpts_loc, real_lattice, 							    //input
 	recip_lattice, kpt_latt, num_bands_tot, num_bands_loc, num_wann_loc, nntot_loc, 					//input
 	num_atoms_loc, atom_atomic, atoms_cart, gamma_only_boolean, 										//input
 	M_matrix, A_matrix, eigenvalues, 																	//input

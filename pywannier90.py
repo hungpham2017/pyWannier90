@@ -6,19 +6,25 @@ email: pqh3.14@gmail.com
 
 # This is the only place needed to be modified
 # The path for the libwannier90 library
-import sys
-sys.path.append('/panfs/roc/groups/6/gagliard/phamx494/pyWannier90') 
 
 import numpy as np
 import scipy
-import libwannier90
 import cmath, os
 import pyscf.lib.parameters as param
 from pyscf import lib
 from pyscf.pbc import df
 from pyscf.pbc.dft import gen_grid, numint
+import sys
+sys.path.append('/panfs/roc/groups/6/gagliard/phamx494/pyWannier90')  # Modify this
 
-
+import importlib
+found = importlib.find_loader('libwannier90') is not None
+if found == True:
+	import libwannier90
+else:
+	print('WARNING: Check the installation and directory of libwannier90')
+	
+	
 def angle(v1, v2):
 	'''
 	Return the angle (in radiant between v1 and v2 
@@ -359,9 +365,9 @@ class W90:
 		'''	
 		self.make_win()
 		self.setup()
-		self.M_matrix_loc = self.build_M_mat()
-		self.A_matrix_loc = self.build_A_mat()		
-		self.eigenvalues_loc = self.build_epsilon_mat()	
+		self.M_matrix_loc = self.get_M_mat()
+		self.A_matrix_loc = self.get_A_mat()		
+		self.eigenvalues_loc = self.get_epsilon_mat()	
 		self.run()
 	
 	def make_win(self):
@@ -372,7 +378,7 @@ class W90:
 		win_file = open('wannier90.win', "w")
 		win_file.write('! Basic input\n')
 		win_file.write('\n')
-		win_file.write('num_bands      = %d\n' % (self.num_bands_tot))
+		win_file.write('num_bands       = %d\n' % (self.num_bands_tot))
 		win_file.write('num_wann       = %d\n' % (self.num_wann))
 		win_file.write('\n')		
 		win_file.write('Begin Unit_Cell_Cart\n')				
@@ -386,9 +392,11 @@ class W90:
 			win_file.write('%s  %7.7f  %7.7f  %7.7f\n' % (self.atom_symbols_loc[atom], self.atoms_frac_loc[atom][0], \
 			 self.atoms_frac_loc[atom][1], self.atoms_frac_loc[atom][2]))			
 		win_file.write('End Atoms_Frac\n')
-		win_file.write('\n')		
-		win_file.write('!Additional keywords\n')		
-		if self.keywords != None: win_file.write(self.keywords)
+		win_file.write('\n')
+		if self.use_bloch_phases == True: win_file.write('use_bloch_phases = T\n\n')			
+		if self.keywords != None: 
+			win_file.write('!Additional keywords\n')
+			win_file.write(self.keywords)
 		win_file.write('\n\n\n')	
 		win_file.write('mp_grid        = %d %d %d\n' % (self.mp_grid_loc[0], self.mp_grid_loc[1], self.mp_grid_loc[2]))	
 		if self.gamma_only == 1: win_file.write('gamma_only : true\n')		
@@ -398,7 +406,7 @@ class W90:
 		win_file.write('End Kpoints\n')		
 		win_file.close()
 		
-	def build_M_mat(self):
+	def get_M_mat(self):
 		'''
 		Construct the ovelap matrix: M_{m,n}^{(\mathbf{k,b})}
 		Equation (25) in MV, Phys. Rev. B 56, 12847
@@ -414,14 +422,14 @@ class W90:
 					k2_scaled = k2_ + self.nn_list[nn, k_id, 1:4]
 					k2 = self.cell.get_abs_kpts(k2_scaled)
 					s_AO = df.ft_ao.ft_aopair(self.cell, -k1+k2, kpti_kptj=[k1,k2], q = np.zeros(3))[0]
-					Cm = self.U[k_id].dot(self.mo_coeff_kpts[k_id])[:,self.band_included_list]
-					Cn = self.U[k_id2].dot(self.mo_coeff_kpts[k_id2])[:,self.band_included_list]	
-					normalized = self.cell.get_lattice_Ls().shape[0]
-					M_matrix_loc[k_id, nn,:,:] = np.einsum('mu,vn,uv->mn', Cm.T.conj(), Cn, s_AO, optimize = True)/normalized
+					s_AO_ortho = np.einsum('iu,uv,vj->ij', (scipy.linalg.inv(self.U[k_id])).T.conj(), s_AO, (scipy.linalg.inv(self.U[k_id2])))
+					Cm = self.mo_coeff_kpts[k_id][:,self.band_included_list]
+					Cn = self.mo_coeff_kpts[k_id2][:,self.band_included_list]						
+					M_matrix_loc[k_id, nn,:,:] = np.einsum('mu,vn,uv->mn', Cm.T.conj(), Cn, s_AO, optimize = True)
 		
 		return M_matrix_loc
 		
-	def build_A_mat(self):
+	def get_A_mat(self):
 		'''
 		Construct the projection matrix: A_{m,n}^{\mathbf{k}}
 		Equation (62) in MV, Phys. Rev. B 56, 12847 or equation (22) in SMV, Phys. Rev. B 65, 035109
@@ -429,7 +437,7 @@ class W90:
 		
 		A_matrix_loc = np.empty([self.num_kpts_loc, self.num_wann_loc, self.num_bands_loc], dtype = np.complex)
 		
-		if self.use_bloch_phases == True:	
+		if self.use_bloch_phases == True:
 			for k_id in range(self.num_kpts_loc):
 				Amn = np.zeros([self.num_wann_loc, self.num_bands_loc])
 				np.fill_diagonal(Amn, 1)
@@ -451,18 +459,18 @@ class W90:
 					x_axis = self.proj_x[ith_wann]
 					z_axis = self.proj_z[ith_wann]
 					gr = g_r(grids.coords, abs_site, l, mr, r, zona, x_axis, z_axis, unit = 'B')
-					C = self.U[k_id].dot(self.mo_coeff_kpts[k_id])[:,self.band_included_list] 
+					C = np.dot(self.U[k_id], self.mo_coeff_kpts[k_id])[:,self.band_included_list] 
 					s_ao = np.einsum('i,iu,i->u', grids.weights, ao.conj(), gr, optimize = True)
 					A_matrix_loc[k_id,ith_wann,:] = np.einsum('um,u->m', C, s_ao, optimize = True)
 					
 		return A_matrix_loc
 
-	def build_epsilon_mat(self):
+	def get_epsilon_mat(self):
 		'''
-		Construct the eigenvalues matrix: \epsilon_{n}(\mathbf{k})
+		Construct the eigenvalues matrix: \epsilon_{n}^(\mathbf{k})
 		'''
 			
-		return np.asarray(self.mo_energy_kpts)[:,self.band_included_list]
+		return np.asarray(self.mo_energy_kpts)[:,self.band_included_list] * param.HARTREE2EV
 
 	def setup(self):
 		'''
@@ -511,13 +519,16 @@ class W90:
 		recip_lattice_loc = self.recip_lattice_loc.flatten()
 		kpt_latt_loc = self.kpt_latt_loc.flatten()
 		atoms_cart_loc = self.atoms_cart_loc.flatten()		
-		real_lattice_loc = self.real_lattice_loc.flatten()		
+		real_lattice_loc = self.real_lattice_loc.flatten()	
+		M_matrix_loc = self.M_matrix_loc.flatten()	
+		A_matrix_loc = self.A_matrix_loc.flatten()	 
+		eigenvalues_loc = self.eigenvalues_loc.flatten()			
 		
 		U_matrix, U_matrix_opt, lwindow, wann_centres, wann_spreads, spread = \
 		libwannier90.run(seed__name, self.mp_grid_loc, self.num_kpts_loc, real_lattice_loc, \
 							recip_lattice_loc, kpt_latt_loc, self.num_bands_tot, self.num_bands_loc, self.num_wann_loc, self.nntot_loc, self.num_atoms_loc, \
 							self.atom_atomic_loc, atoms_cart_loc, self.gamma_only, \
-							self.M_matrix_loc, self.A_matrix_loc, self.eigenvalues_loc)
+							M_matrix_loc, A_matrix_loc, eigenvalues_loc)
 							
 		# Convert outputs to the correct data type
 		self.U_matrix = U_matrix
@@ -526,8 +537,8 @@ class W90:
 		self.lwindow = (lwindow == 1)
 		self.wann_centres = wann_centres.real
 		self.wann_spreads = wann_spreads.real
-		self.spread =spread.real
-		
+		self.spread = spread.real
+	
 	def export_unk(self, grid = [50,50,50]):
 		'''
 		Export the periodic part of BF in a real space grid for plotting with wannier90
@@ -542,12 +553,54 @@ class W90:
 			u_ao = np.einsum('x,xi->xi', np.exp(-1j*np.dot(grids_coor, kpt)), ao, optimize = True)
 			unk_file = FortranFile('UNK0000' + str(k_id + 1) + '.1', 'w')
 			unk_file.write_record(np.asarray([grid[0], grid[1], grid[2], k_id + 1, self.num_bands_loc], dtype = np.int32))	
-			mo_included = self.U[k_id].dot(self.mo_coeff_kpts[k_id])[:,self.band_included_list]
+			mo_included = np.dot(self.U[k_id], self.mo_coeff_kpts[k_id])[:,self.band_included_list]		
 			u_mo = np.einsum('xi,in->xn', u_ao, mo_included, optimize = True)
 			for band in range(len(self.band_included_list)):	
 				unk_file.write_record(np.asarray(u_mo[:,band], dtype = np.complex))					
 			unk_file.close()
+
+	def export_AME(self, grid = [50,50,50]):
+		'''
+		Export A_{m,n}^{\mathbf{k}} and M_{m,n}^{(\mathbf{k,b})} and \epsilon_{n}^(\mathbf{k})
+		'''	
 		
+		if self.A_matrix_loc.all() == None:
+			self.make_win()
+			self.setup()
+			self.M_matrix_loc = self.get_M_mat()
+			self.A_matrix_loc = self.get_A_mat()		
+			self.eigenvalues_loc = self.get_epsilon_mat()
+			self.export_unk(self, grid = grid)
+			
+		with open('wannier90.mmn', 'w') as f:
+			f.write('Generated by the pyWannier90\n')		
+			f.write('    %d    %d    %d\n' % (self.num_bands_loc, self.num_kpts_loc, self.nntot_loc))
+	
+			for k_id in range(self.num_kpts_loc):
+				for nn in range(self.nntot_loc):
+					k_id1 = k_id + 1
+					k_id2 = self.nn_list[nn, k_id, 0]
+					nnn, nnm, nnl = self.nn_list[nn, k_id, 1:4]
+					f.write('    %d  %d    %d  %d  %d\n' % (k_id1, k_id2, nnn, nnm, nnl))
+					for m in range(self.num_bands_loc):
+						for n in range(self.num_bands_loc):
+							f.write('    %22.18f  %22.18f\n' % (self.M_matrix_loc[k_id, nn,m,n].real, self.M_matrix_loc[k_id, nn,m,n].imag))
+					
+	
+		with open('wannier90.amn', 'w') as f:
+			f.write('    %d\n' % (self.num_bands_loc*self.num_kpts_loc*self.num_wann_loc))		
+			f.write('    %d    %d    %d\n' % (self.num_bands_loc, self.num_kpts_loc, self.num_wann_loc))
+	
+			for k_id in range(self.num_kpts_loc):
+				for ith_wann in range(self.num_wann_loc):
+					for band in range(self.num_bands_loc):
+						f.write('    %d    %d    %d    %22.18f    %22.18f\n' % (band+1, ith_wann+1, k_id+1, self.A_matrix_loc[k_id,ith_wann,band].real, self.A_matrix_loc[k_id,ith_wann,band].imag))
+		
+		with open('wannier90.eig', 'w') as f:
+			for k_id in range(self.num_kpts_loc):
+				for band in range(self.num_bands_loc):
+						f.write('    %d    %d    %22.18f\n' % (band+1, k_id+1, self.eigenvalues_loc[k_id,band]))
+			
 	def get_wannier(self, grid = [50,50,50]):
 		'''
 		Evaluate the MLWF using a general grid
@@ -555,12 +608,12 @@ class W90:
 		
 		grids_coor = general_grid(self.cell, grid)
 		
-		WFs = 0 #np.empty([grids_coor.shape[0], self.num_wann_loc], dtype = np.complex)
+		WFs = 0
 		
 		for k_id in range(self.num_kpts_loc): #self.num_kpts_loc
 			kpt = self.cell.get_abs_kpts(self.kpt_latt_loc[k_id])	
 			ao = numint.eval_ao(self.cell, grids_coor, kpt = kpt)
-			mo_included = self.U[k_id].dot(self.mo_coeff_kpts[k_id])[:,self.band_included_list]
+			mo_included = np.dot(self.U[k_id], self.mo_coeff_kpts[k_id])[:,self.band_included_list]
 			mo_in_window = self.lwindow[k_id]
 			C_opt = mo_included[:,mo_in_window].dot(self.U_matrix_opt[k_id].T)
 			C_tildle = C_opt.dot(self.U_matrix[k_id].T)			
@@ -576,20 +629,13 @@ class W90:
 		for WF_id in range(self.num_wann_loc):
 			ratio_max = np.abs(WFs[(WFs[:,WF_id].real > 0.01),WF_id].imag/WFs[(WFs[:,WF_id].real > 0.01),WF_id].real).max(axis=0)
 			print('The maximum imag/real for wannier function ', WF_id,' : ', ratio_max)
-			
-		# Check the 'reality' of the WF		
-		if (np.abs(WFs.imag) > 1e-10).any(): 
-			print('WARNING: Wannier functions are complex')
-			self.check_complex = True
 		
 		return WFs
 
 	def plot_wf(self, outfile = 'MLWF', wf_list = None, supercell = [1,1,1], grid = [50,50,50]):
 		'''
 		Export Wannier function at cell R
-		ref for *.xsf format: http://web.mit.edu/xcrysden_v1.5.60/www/XCRYSDEN/doc/XSF.html
-		NOTE: the different between the regular grid in xcrysden file and periodic grid where some grid points in 
-		the boudary are eleminated to avoid redudancy.
+		xsf format: http://web.mit.edu/xcrysden_v1.5.60/www/XCRYSDEN/doc/XSF.html
 		Attributes:
 			wf_list		: a list of MLWFs to plot
 			supercell	: a supercell used for plotting
@@ -650,18 +696,6 @@ class W90:
 				for iz in range(nZ):
 					for iy in range(nY):
 						f.write(fmt % tuple(superWF[:,iy,iz].tolist()))		
-
-				#DEBUG				
-				# fmt = ' %13.5e' * nZ + '\n'
-				# for ix in range(nX):
-					# for iy in range(nY):
-						# for iz in range(nZ):
-							# f.write(fmt % tuple(superWF[ix,iy,:].tolist()))
-				# for ix in range(nX):
-					# for iy in range(nY):
-						# for iz in range(nZ):
-							# if  (iz*nY*nX + iy*nX + ix != 0) & (np.mod(iz*nY*nX + iy*nX + ix, 6) == 0): f.write('\n')						
-							# f.write(' %13.5e'  % superWF[iz,iy,ix])	
 	
 				f.write('\n')									
 				f.write('END_DATAGRID_3D\nEND_BLOCK_DATAGRID_3D')		
@@ -669,9 +703,6 @@ class W90:
 	def plot_gr(self, outfile = 'MLWF', l = 0, mr = 1, r = 1, zona = 1, site = [0.5,0.5,0.5], x_axis = [1,0,0], z_axis = [0,0,1], grid = [50,50,50]):
 		'''
 		Export the g(r) function
-		ref for *.xsf format: http://web.mit.edu/xcrysden_v1.5.60/www/XCRYSDEN/doc/XSF.html
-		NOTE: the different between the regular grid in xcrysden file and periodic grid where some grid points in 
-		the boudary are eleminated to avoid redudancy.
 		'''
 		
 		grids_coor = general_grid(self.cell, grid)
@@ -744,7 +775,7 @@ if __name__ == '__main__':
 	end projections
 	'''
 	
-	w90 = pywannier90.W90(kmf, nk, num_wann, gamma = True, other_keywords = keywords)
+	w90 = pywannier90.W90(kmf, nk, num_wann, other_keywords = keywords)
 	w90.kernel()
 	
 	# Plotting using pyWannier90
@@ -761,5 +792,5 @@ if __name__ == '__main__':
 	wannier_plot_supercell = 1
 	'''
 
-	w90 = pywannier90.W90(kmf, nk, num_wann, gamma = True, other_keywords = keywords)
+	w90 = pywannier90.W90(kmf, nk, num_wann, other_keywords = keywords)
 	w90.kernel()

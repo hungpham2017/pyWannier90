@@ -994,17 +994,17 @@ end subroutine plot_interpolate_bands
        ! but the reduced number of operations wins out. 
 
 	!HP: Modified to for pyWannier90
-       do nzz= 0, ngs(3)*(ngz-1) 
+       do nxx= 0, ngs(1)*(ngx-1) 
           do nyy= 0, ngs(2)*(ngy-1) 
-             do nxx= 0, ngs(1)*(ngx-1)
-				nx= mod(nxx,ngx-1) + 1
+             do nzz= 0, ngs(3)*(ngz-1)
+				nx= mod(nxx,ngx-1)
 				ny= mod(nyy,ngy-1)
-				nz= mod(nzz,ngz-1)
-				npoint= nz*ngy*ngx + ny*ngx + nx
+				nz= mod(nzz,ngz-1) + 1
+				npoint= nx*ngy*ngz + ny*ngz + nz
 				
-                scalfac=kpt_latt(3,loop_kpt)*real(nxx,dp)/real(ngs(1)*(ngx-1),dp)+ &
+                scalfac=kpt_latt(1,loop_kpt)*real(nxx,dp)/real(ngs(1)*(ngx-1),dp)+ &
                      kpt_latt(2,loop_kpt)*real(nyy,dp)/real(ngs(2)*(ngy-1) ,dp)+ &
-                     kpt_latt(1,loop_kpt)*real(nzz,dp)/real(ngs(3)*(ngz-1),dp)
+                     kpt_latt(3,loop_kpt)*real(nzz,dp)/real(ngs(3)*(ngz-1),dp)
      
                 catmp=exp(twopi*cmplx_i*scalfac)
                 do loop_b=1,num_wann
@@ -1056,9 +1056,9 @@ end subroutine plot_interpolate_bands
     do loop_w=1,num_wannier_plot
        tmaxx=0.0
        wmod=cmplx_1
-       do nzz= 0, ngs(3)*(ngz-1) 
+       do nxx= 0, ngs(1)*(ngx-1) 
           do nyy= 0, ngs(2)*(ngy-1) 
-             do nxx= 0, ngs(1)*(ngx-1) 
+             do nzz= 0, ngs(3)*(ngz-1) 
                 wann_func(nxx,nyy,nzz,loop_w)= wann_func(nxx,nyy,nzz,loop_w)/ real(num_kpts,dp)
                 tmax=real(wann_func(nxx,nyy,nzz,loop_w)* & 
                      conjg(wann_func(nxx,nyy,nzz,loop_w)),dp)
@@ -1103,9 +1103,9 @@ end subroutine plot_interpolate_bands
 	!HP: Modified to for pyWannier90	
     do loop_w=1,num_wannier_plot
        ratmax=0.0_dp
-       do nzz= 0, ngs(3)*(ngz-1) 
+       do nxx= 0, ngs(1)*(ngx-1) 
           do nyy= 0, ngs(2)*(ngy-1) 
-             do nxx= 0, ngs(1)*(ngx-1) 
+             do nzz= 0, ngs(3)*(ngz-1) 
                 if (abs(real(wann_func(nxx,nyy,nzz,loop_w),dp))>=0.01_dp) then
                    ratio=abs(aimag(wann_func(nxx,nyy,nzz,loop_w)))/ &
                         abs(real(wann_func(nxx,nyy,nzz,loop_w),dp))
@@ -1459,8 +1459,8 @@ end subroutine plot_interpolate_bands
          write(file_unit,'(3f12.7)') dirl(2,1),dirl(2,2),dirl(2,3)
          write(file_unit,'(3f12.7)') dirl(3,1),dirl(3,2),dirl(3,3)
          write(file_unit,'(6e13.5)') &
-              (((real(wann_func(nx,ny,nz,loop_b)),nx=-((ngs(1))/2)*ngx,((ngs(1)+1)/2)*ngx-1), &
-              ny=-((ngs(2))/2)*ngy,((ngs(2)+1)/2)*ngy-1),nz=-((ngs(3))/2)*ngz,((ngs(3)+1)/2)*ngz-1)
+              (((real(wann_func(nx,ny,nz,loop_b)),nz=-((ngs(3))/2)*ngz,((ngs(3)+1)/2)*ngz-1), &
+              ny=-((ngs(2))/2)*ngy,((ngs(2)+1)/2)*ngy-1),nx=-((ngs(1))/2)*ngx,((ngs(1)+1)/2)*ngx-1)
          write(file_unit,'("END_DATAGRID_3D",/, "END_BLOCK_DATAGRID_3D")')
          close(file_unit)
 

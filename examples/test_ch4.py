@@ -10,7 +10,6 @@ Construct four sp3-like WFs from 9 Bloch states
 '''
 
 import numpy as np
-from pyscf import scf, gto
 from pyscf.pbc import gto, dft, df
 import pywannier90
 
@@ -43,8 +42,9 @@ C:sp3
 end projections
 '''
 
-w90 = pywannier90.W90(kmf, nk, num_wann, gamma = True, other_keywords = keywords)
+w90 = pywannier90.W90(kmf, nk, num_wann, other_keywords = keywords)
 w90.kernel()
+w90.export_AME()
 w90.plot_wf(wf_list=[0,1,2,3], supercell = [1,1,1])
 w90.export_unk()
 
@@ -58,5 +58,5 @@ wannier_plot = True
 wannier_plot_supercell = 1
 '''
 
-w90 = pywannier90.W90(kmf, nk, num_wann, gamma = True, other_keywords = keywords)
+w90 = pywannier90.W90(kmf, nk, num_wann, other_keywords = keywords)
 w90.kernel()

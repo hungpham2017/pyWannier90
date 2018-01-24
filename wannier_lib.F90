@@ -50,7 +50,7 @@
 !                                                            !
 ! https://github.com/wannier-developers/wannier90            !
 !------------------------------------------------------------!
-module w90
+module w90lib
 !Modified to be used as library for a python environment
 !Hung Q. Pham
 !email: pqh3.14@gmail.com
@@ -189,7 +189,7 @@ subroutine wannier_setup(seed__name,mp_grid_loc,num_kpts_loc,&
   call param_lib_set_atoms(atom_symbols_loc,atoms_cart_loc)
   gamma_only=gamma_only_loc
   spinors=spinors_loc
-
+  
   ! AAM_2016-09-14: initialise num_bands as it's used in param_read()
   num_bands = num_bands_tot
   call param_read()
@@ -495,4 +495,4 @@ subroutine wannier_run(seed__name,mp_grid_loc,num_kpts_loc, &
 
 end subroutine wannier_run
 
-end module w90
+end module w90lib
