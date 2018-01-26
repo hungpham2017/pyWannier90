@@ -1,4 +1,4 @@
-# pyWannier90: A python interface of Wannier90 for PySCF 
+# pyWannier90: A Wannier90 python interface for PySCF 
 
 
 <img src="https://github.com/hungpham2017/pyWannier90/blob/master/doc/Polyyens.png" width="500" align="middle">
