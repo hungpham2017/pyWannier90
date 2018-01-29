@@ -1,8 +1,0 @@
-README.md
-setup.py
-pyWannier90.egg-info/PKG-INFO
-pyWannier90.egg-info/SOURCES.txt
-pyWannier90.egg-info/dependency_links.txt
-pyWannier90.egg-info/requires.txt
-pyWannier90.egg-info/top_level.txt
-pyWannier90.egg-info/zip-safe
