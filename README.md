@@ -1,4 +1,3 @@
-[![Build Status](https://travis-ci.org/hungpham2017/pyWannier90.svg?branch=master)](https://travis-ci.org/hungpham2017/pyWannier90)
 # pyWannier90: A Wannier90 python interface for PySCF 
 
 
