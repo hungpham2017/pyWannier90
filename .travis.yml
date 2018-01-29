@@ -16,15 +16,14 @@ before_install:
   - ulimit -a
 
 install:
-  - wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh;
-  - bash miniconda.sh -b -p $HOME/miniconda
-  - export PATH="$HOME/miniconda/bin:$PATH"
+  - wget https://repo.continuum.io/archive/Anaconda3-5.0.1-Linux-x86_64.sh -O anaconda.sh;
+  - bash anaconda.sh -b -p $HOME/anaconda
+  - export PATH="$HOME/anaconda/bin:$PATH"
   - hash -r
   - conda config --set always_yes yes --set changeps1 no
   - conda update -q conda
   - conda info -a
-  - conda create -n sss python=3.5 psi4 pytest pytest-cov numpy lawrap pybind11 cmake scipy numexpr mkl-include gcc-5-mp -c intel -c psi4/label/dev -c psi4
-  - source activate sss
+  - conda install python=3.6 cython mpi4py mpich mpich2 openmpi lawrap cmake numexpr mkl-include gcc-5-mp pychemps2 bzip2 pybind11 -c conda-forge -c intel -c mpi4py -c anaconda
   - pip install codecov
   - conda list
 
