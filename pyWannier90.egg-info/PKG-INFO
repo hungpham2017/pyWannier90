@@ -1,0 +1,15 @@
+Metadata-Version: 1.1
+Name: pyWannier90
+Version: 0.1
+Summary: Wannier90 python interface for PySCF
+Home-page: https://github.com/hungpham2017/pyWannier90.git
+Author: Hung Pham
+Author-email: pqh3.14@gmail.com
+License: BSD-3C
+Description-Content-Type: UNKNOWN
+Description: UNKNOWN
+Platform: UNKNOWN
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Science/Research
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3
