@@ -23,7 +23,7 @@ install:
   - conda config --set always_yes yes --set changeps1 no
   - conda update -q conda
   - conda info -a
-  - conda install python=3.6 lawrap cmake mkl-include gcc-5-mp bzip2 pybind11 -c conda-forge -c intel -c anaconda
+  - conda install python=3.6 lawrap cmake mkl-include gcc-5-mp bzip2 pybind11 -c conda-forge -c intel -c anaconda -c psi4/label/dev -c psi4 
   - pip install codecov
   - conda list
 
