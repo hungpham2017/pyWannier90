@@ -23,7 +23,7 @@ install:
   - conda config --set always_yes yes --set changeps1 no
   - conda update -q conda
   - conda info -a
-  - conda create -n sss python=3.5 psi4 pytest pytest-cov numpy lawrap cmake scipy numexpr mkl-include gcc-5-mp -c intel -c psi4/label/dev -c psi4
+  - conda create -n sss python=3.5 psi4 pytest pytest-cov numpy lawrap pybind11 cmake scipy numexpr mkl-include gcc-5-mp -c intel -c psi4/label/dev -c psi4
   - source activate sss
   - pip install codecov
   - conda list
