@@ -256,41 +256,7 @@ def g_r(grids_coor, site, l, mr, r, zona, x_axis = [1,0,0], z_axis = [0,0,1], un
 	
 	return theta_lmr(l, mr, cost, phi) * R_r(r_norm * unit_conv, r = r, zona = zona)
 	
-	
-def get_ovlp(wA, wB, R_A = [0,0,0], R_B = [0,0,0]):
-	'''
-	Evaluate the overlap matrix between two Wannier functions obtained from two sets of Bloch orbitals
-	Note: Wannier functions from the same set of Bloch orbitals are orthogonal to each other.
-	Attributes:
-		wA, wB		: two W90 objects
-		RA, RB		: two R vectors
-	Return:
-		S_{AB} = \langle \omega_{n}^A(\mathbf{R_A,r}) | \omega_{l}^B(\mathbf{R_B,r}) \rangle
-	'''	
-	
-	#R_vec = np.asarray(R).dot(self.cell.lattice_vectors())	
-	cell = wA.cell
-	kpts = wA.kmf.kpts
-	num_kpts = kpts.shape[0]
-	C = wA.kmf.mo_coeff_kpts
-	U_wA = wA.U_matrix
-	U_wB = wB.U_matrix
-	# Be careful about R_A, R_B: should be the absolute vectors
-	s = 0
-	for k1_id in range(num_kpts):
-		for k2_id in range(num_kpts):
-			k_A = kpts[k1_id]
-			k_B = kpts[k2_id]	
-			C_A = C[k1_id]
-			C_B = C[k2_id]	
-			C_tildle_A = C_A.dot(U_wA[k1_id])
-			C_tildle_B = C_B.dot(U_wB[k1_id])
-			S_bloch = 0
-			s =+  np.einsum('mk,nl,mn->kl', C_tildle_A, C_tildle_B, S_bloch, optimize=True) * np.exp(-1j * (k_B.dot(R_B) - k_A.dot(R_A)))
 			
-	return s/np.sqrt(num_kpts)
-			
-	
 class W90:
 	def __init__(self, kmf, mp_grid, num_wann, gamma = False, spinors = False, spin_up = None, other_keywords = None):
 		
@@ -300,7 +266,6 @@ class W90:
 		self.keywords = other_keywords
 
 		# Collect the pyscf calculation info
-		self.U = [scipy.linalg.sqrtm(s) for s in kmf.get_ovlp()]	# Used to orthonormalize the Bloch states
 		self.num_bands_tot = self.cell.nao_nr()
 		self.num_kpts_loc = kmf.kpts.shape[0]
 		self.mp_grid_loc = mp_grid
@@ -354,13 +319,16 @@ class W90:
 		if spin_up != None:
 			if spin_up == True:
 				self.mo_energy_kpts = self.kmf.mo_energy_kpts[0]
-				self.mo_coeff_kpts = self.kmf.mo_coeff_kpts[0]				
+				self.mo_coeff_kpts = self.kmf.mo_coeff_kpts[0]	
+				self.mo_coeff_ortho_kpts = [np.dot(mo, orth.lowdin(mo.T.dot(mo))) for mo in self.kmf.mo_coeff_kpts[0]]	
 			else:
 				self.mo_energy_kpts = self.kmf.mo_energy_kpts[1]
-				self.mo_coeff_kpts = self.kmf.mo_coeff_kpts[1]			
+				self.mo_coeff_kpts = self.kmf.mo_coeff_kpts[1]	
+				self.mo_coeff_ortho_kpts = [np.dot(mo, orth.lowdin(mo.T.dot(mo))) for mo in self.kmf.mo_coeff_kpts[1]]				
 		else:
 			self.mo_energy_kpts = self.kmf.mo_energy_kpts
 			self.mo_coeff_kpts = self.kmf.mo_coeff_kpts	
+			self.mo_coeff_ortho_kpts = [np.dot(mo, orth.lowdin(mo.T.dot(mo))) for mo in self.kmf.mo_coeff_kpts]
 			
 	def kernel(self):
 		'''
@@ -425,7 +393,6 @@ class W90:
 					k2_scaled = k2_ + self.nn_list[nn, k_id, 1:4]
 					k2 = self.cell.get_abs_kpts(k2_scaled)
 					s_AO = df.ft_ao.ft_aopair(self.cell, -k1+k2, kpti_kptj=[k1,k2], q = np.zeros(3))[0]
-					s_AO_ortho = np.einsum('iu,uv,vj->ij', (scipy.linalg.inv(self.U[k_id])).T.conj(), s_AO, (scipy.linalg.inv(self.U[k_id2])))
 					Cm = self.mo_coeff_kpts[k_id][:,self.band_included_list]
 					Cn = self.mo_coeff_kpts[k_id2][:,self.band_included_list]						
 					M_matrix_loc[k_id, nn,:,:] = np.einsum('mu,vn,uv->mn', Cm.T.conj(), Cn, s_AO, optimize = True)
@@ -462,7 +429,7 @@ class W90:
 					x_axis = self.proj_x[ith_wann]
 					z_axis = self.proj_z[ith_wann]
 					gr = g_r(grids.coords, abs_site, l, mr, r, zona, x_axis, z_axis, unit = 'B')
-					C = np.dot(self.U[k_id], self.mo_coeff_kpts[k_id])[:,self.band_included_list] 
+					C = self.mo_coeff_ortho_kpts[k_id][:,self.band_included_list] 
 					s_ao = np.einsum('i,iu,i->u', grids.weights, ao.conj(), gr, optimize = True)
 					A_matrix_loc[k_id,ith_wann,:] = np.einsum('um,u->m', C, s_ao, optimize = True)
 					
@@ -556,7 +523,7 @@ class W90:
 			u_ao = np.einsum('x,xi->xi', np.exp(-1j*np.dot(grids_coor, kpt)), ao, optimize = True)
 			unk_file = FortranFile('UNK0000' + str(k_id + 1) + '.1', 'w')
 			unk_file.write_record(np.asarray([grid[0], grid[1], grid[2], k_id + 1, self.num_bands_loc], dtype = np.int32))	
-			mo_included = np.dot(self.U[k_id], self.mo_coeff_kpts[k_id])[:,self.band_included_list]		
+			mo_included = self.mo_coeff_ortho_kpts[k_id][:,self.band_included_list]		
 			u_mo = np.einsum('xi,in->xn', u_ao, mo_included, optimize = True)
 			for band in range(len(self.band_included_list)):	
 				unk_file.write_record(np.asarray(u_mo[:,band], dtype = np.complex))					
@@ -616,7 +583,7 @@ class W90:
 		for k_id in range(self.num_kpts_loc): #self.num_kpts_loc
 			kpt = self.cell.get_abs_kpts(self.kpt_latt_loc[k_id])	
 			ao = numint.eval_ao(self.cell, grids_coor, kpt = kpt)
-			mo_included = np.dot(self.U[k_id], self.mo_coeff_kpts[k_id])[:,self.band_included_list]
+			mo_included = self.mo_coeff_ortho_kpts[k_id][:,self.band_included_list]
 			mo_in_window = self.lwindow[k_id]
 			C_opt = mo_included[:,mo_in_window].dot(self.U_matrix_opt[k_id].T)
 			C_tildle = C_opt.dot(self.U_matrix[k_id].T)			
