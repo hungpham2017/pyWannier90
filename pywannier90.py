@@ -321,15 +321,15 @@ class W90:
 			if spin_up == True:
 				self.mo_energy_kpts = self.kmf.mo_energy_kpts[0]
 				self.mo_coeff_kpts = self.kmf.mo_coeff_kpts[0]	
-				self.mo_coeff_ortho_kpts = [np.dot(mo, orth.lowdin(mo.T.dot(mo))) for mo in self.kmf.mo_coeff_kpts[0]]	
+				self.mo_coeff_ortho_kpts = [np.dot(mo, orth.lowdin(mo.T.conj().dot(mo))) for mo in self.kmf.mo_coeff_kpts[0]]	
 			else:
 				self.mo_energy_kpts = self.kmf.mo_energy_kpts[1]
 				self.mo_coeff_kpts = self.kmf.mo_coeff_kpts[1]	
-				self.mo_coeff_ortho_kpts = [np.dot(mo, orth.lowdin(mo.T.dot(mo))) for mo in self.kmf.mo_coeff_kpts[1]]				
+				self.mo_coeff_ortho_kpts = [np.dot(mo, orth.lowdin(mo.T.conj().dot(mo))) for mo in self.kmf.mo_coeff_kpts[1]]				
 		else:
 			self.mo_energy_kpts = self.kmf.mo_energy_kpts
 			self.mo_coeff_kpts = self.kmf.mo_coeff_kpts	
-			self.mo_coeff_ortho_kpts = [np.dot(mo, orth.lowdin(mo.T.dot(mo))) for mo in self.kmf.mo_coeff_kpts]
+			self.mo_coeff_ortho_kpts = [np.dot(mo, orth.lowdin(mo.T.conj().dot(mo))) for mo in self.kmf.mo_coeff_kpts]
 			
 	def kernel(self):
 		'''
