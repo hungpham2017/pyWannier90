@@ -30,7 +30,7 @@ installation and implementations.
 
 # This is the only place needed to be modified
 # The path for the libwannier90 library
-W90LIB = 'libwannier90-path'
+W90LIB = '/panfs/roc/groups/6/gagliard/phamx494/CPPlib/pyWannier90'
 
 import numpy as np
 import scipy
@@ -298,43 +298,6 @@ def theta_lmr(l, mr, cost, phi):
 
 
 def g_r(grids_coor, site, l, mr, r, zona, x_axis = [1,0,0], z_axis = [0,0,1], unit = 'B'):
-<<<<<<< HEAD
-	'''
-	Evaluate the projection function g(r) or \Theta_{l,m_r}(\theta,\phi) on a grid
-	ref: Chapter 3, wannier90 User Guide
-	Attributes:
-		grids_coor					: a grids for the cell of interest
-		site					: absolute coordinate (in Borh/Angstrom) of the g(r) in the cell
-		l, mr					: l and mr value in the Table 3.1 and 3.2 of the ref
-	Return:
-		theta_lmr					: an array (ngrid, value) of g(r)
-
-	'''
-
-	unit_conv = 1
-	if unit == 'A': unit_conv = param.BOHR
-	
-	
-	r_vec = (grids_coor - site)		
-	r_vec = np.einsum('iv,uv ->iu', r_vec, transform(x_axis, z_axis))
-	r_norm = np.linalg.norm(r_vec,axis=1) 
-	assert ( r_norm < 1e-8 ).any() == False			# Make sure r_norm is not too small, numerically instable
-	cost = r_vec[:,2]/r_norm
-	
-	phi = np.empty_like(r_norm)
-	for point in range(phi.shape[0]):
-		if r_vec[point,0] > 1e-8:
-			phi[point] = np.arctan(r_vec[point,1]/r_vec[point,0])
-		elif r_vec[point,0] < -1e-8:
-			phi[point] = np.arctan(r_vec[point,1]/r_vec[point,0]) + np.pi
-		else:
-			phi[point] = np.sign(r_vec[point,1]) * 0.5 * np.pi
-	
-	return theta_lmr(l, mr, cost, phi) * R_r(r_norm * unit_conv, r = r, zona = zona)
-	
-	
-			
-=======
     r'''
     Evaluate the projection function g(r) or \Theta_{l,m_r}(\theta,\phi) on a grid
     ref: Chapter 3, wannier90 User Guide
@@ -373,7 +336,6 @@ def g_r(grids_coor, site, l, mr, r, zona, x_axis = [1,0,0], z_axis = [0,0,1], un
 
 
 
->>>>>>> master
 class W90:
     def __init__(self, kmf, cell, mp_grid, num_wann, gamma = False, spinors = False, spin_up = None, other_keywords = None):
 
@@ -806,6 +768,7 @@ if __name__ == '__main__':
     kmf = dft.KRKS(cell, abs_kpts).mix_density_fit()
     kmf.xc = 'pbe'
     ekpt = kmf.run()
+    pywannier90.save_kmf(kmf, 'chk_mf')  # Save the wave function
         
     # Run pyWannier90 and plot WFs using pyWannier90        
     num_wann = 4
@@ -817,6 +780,7 @@ if __name__ == '__main__':
     end projections
     '''
     
+    # To use the saved wave function, replace kmf with 'chk_mf'
     w90 = pywannier90.W90(kmf, cell, nk, num_wann, other_keywords = keywords)
     w90.kernel()
     w90.plot_wf(grid=[25,25,25], supercell = [1,1,1])
