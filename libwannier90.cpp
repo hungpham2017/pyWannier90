@@ -12,6 +12,8 @@ email: pqh3.14@gmail.com
 #include <string>
 #include <complex>
 #include <vector>
+#include <lawrap/blas.h>
+#include <lawrap/lapack.h>
 
 extern "C" {
 	
@@ -37,6 +39,12 @@ extern "C" {
 
 
 namespace py = pybind11;
+namespace consts
+{
+	const double Pi = 3.141592653589793;
+	const std::complex<double> Onecomp(0.0, 1.0);
+	const std::complex<double> Zerocomp(0.0, 0.0);	
+}
 
 std::vector<py::array_t<double>> setup(char* seed__name, py::array_t<int> mp_grid_loc, int* num_kpts_loc, py::array_t<double> real_lattice_loc,
 				py::array_t<double>  recip_lattice_loc, py::array_t<double>  kpt_latt_loc, int* num_bands_tot, int* num_atoms_loc,
@@ -259,7 +267,9 @@ std::vector<py::array_t<double>> setup(char* seed__name, py::array_t<int> mp_gri
 std::vector<py::array_t<std::complex<double>>> run(char* seed__name, py::array_t<int> mp_grid_loc, int* num_kpts_loc, py::array_t<double> real_lattice_loc,
 				py::array_t<double>  recip_lattice_loc, py::array_t<double>  kpt_latt_loc, int* num_bands_tot, int* num_bands_loc, int* num_wann_loc, int* nntot_loc,  		 					
 			int* num_atoms_loc, py::array_t<int> atom_atomic_loc, py::array_t<double>  atoms_cart_loc, int* gamma_only_boolean,		 										
-			py::array_t<std::complex<double>> M_matrix_loc, py::array_t<std::complex<double>> A_matrix_loc, py::array_t<double> eigenvalues_loc){
+			py::array_t<std::complex<double>, py::array::c_style | py::array::forcecast> M_matrix_loc, 
+            py::array_t<std::complex<double>, py::array::c_style | py::array::forcecast> A_matrix_loc, 
+            py::array_t<double, py::array::c_style | py::array::forcecast> eigenvalues_loc){
 
 	std::cout << "You are running Wannier90_run via pyWannier90" << "\n";
 	
@@ -399,10 +409,170 @@ std::vector<py::array_t<std::complex<double>>> run(char* seed__name, py::array_t
 	
 }
 
+py::array_t<std::complex<double>>  get_WF0s(int num_kpts, py::array_t<double> kpts, py::array_t<int> supercell, py::array_t<int> grid,
+										py::array_t<std::complex<double>, py::array::c_style | py::array::forcecast> u_mo)
+{
+	//inverse FT for one-electron operator (in a grid): from k-space to L-space
+    //Used to transform the ao(k) into ao(L0), L0 indicates the reference unit cell
+	
+	py::buffer_info kpts_info = kpts.request();
+	const double * kpts_data = static_cast<double*>(kpts_info.ptr);
+	py::buffer_info supercell_info = supercell.request();
+	const int * supercell_data = static_cast<int*>(supercell_info.ptr);  
+	py::buffer_info grid_info = grid.request();
+	const int * grid_data = static_cast<int*>(grid_info.ptr);     
+	py::buffer_info u_mo_info = u_mo.request();
+	const std::complex<double> * u_mo_data = static_cast<std::complex<double>*>(u_mo_info.ptr);
+	int Ngrid = u_mo_info.shape[1];
+	int num_band = u_mo_info.shape[2];	
+	// if (input_info.shape[0] != num_kpts)
+		// throw std::runtime_error("input.shape[0] is not equal to the num_Ls");
+
+    int Ngrid_t_num_band  = Ngrid*num_band;
+    int ngs1 = supercell_data[0];
+    int ngs2 = supercell_data[1];
+    int ngs3 = supercell_data[2]; 
+    int ngx = grid_data[0];
+    int ngy = grid_data[1];
+    int ngz = grid_data[2];     
+    int num_pts1 = ngx*ngs1;
+    int num_pts2 = ngy*ngs2;
+    int num_pts3 = ngz*ngs3;
+    
+    int num_pts3_nband = num_pts3*num_band;
+    int num_pts23_nband = num_pts2*num_pts3*num_band;
+    int size = num_band*num_pts1*num_pts2*num_pts3;    
+    std::vector<std::complex<double>> wann_func(size,0);
+  
+    for (int kpt = 0; kpt < num_kpts ; kpt++){
+        for (int nxx = -((ngs1)/2)*ngx; nxx < ((ngs1+1)/2)*ngx; nxx++){
+            int nx = nxx%ngx;
+            int nxxx = nxx + (ngs1/2)*ngx;
+            if(nx < 1) nx = nx + ngx;
+            for (int nyy = -((ngs2)/2)*ngy; nyy < ((ngs2+1)/2)*ngy; nyy++){
+                int ny = nyy%ngy;
+                int nyyy = nyy + (ngs2/2)*ngy;
+                if(ny < 1) ny = ny + ngy;
+                for (int nzz = -((ngs3)/2)*ngz; nzz < ((ngs3+1)/2)*ngz; nzz++){
+                    int nz = nzz%ngz;
+                    int nzzz = nzz + (ngs3/2)*ngz;
+                    if(nz < 1) nz = nz + ngz;
+ 
+                    double scalfac = kpts_data[kpt*3+0]*((float)(nxx-1)/(float)ngx)+ //
+                              kpts_data[kpt*3+1]*((float)(nyy-1)/(float)ngy)+ //
+                              kpts_data[kpt*3+2]*((float)(nzz-1)/(float)ngz);
+                              
+                    int npoint = (nx-1)*ngy*ngz + (ny-1)*ngz + nz-1;               
+                    std::complex<double> catmp = std::exp(2*consts::Pi*consts::Onecomp*scalfac);   
+                    //std::cout << nxx << " " << nyy << " " << nzz << " " << catmp << "\n";
+                    for (int loop_w = 0; loop_w < num_band; loop_w++){  
+                        wann_func[nxxx*num_pts23_nband + nyyy*num_pts3_nband + nzzz*num_band + loop_w] += catmp*u_mo_data[kpt*Ngrid_t_num_band + npoint*num_band + loop_w];   
+                    //std::cout << wann_func[nxxx*num_pts23_nband + nyyy*num_pts3_nband + nzzz*num_band + loop_w] << "\n";
+                    } 
+                }                
+            }            
+        }
+    }
+
+	size_t pnum_band = num_band;
+	size_t pnum_pts123 = num_pts1*num_pts2*num_pts3;             
+	py::buffer_info wann_func_buf =
+		{
+			wann_func.data(),
+			sizeof(std::complex<double>),
+			py::format_descriptor<std::complex<double>>::format(),
+			2,
+			{pnum_pts123,pnum_band},
+			{pnum_band * sizeof(std::complex<double>), sizeof(std::complex<double>)}
+		};
+		
+	return py::array_t<std::complex<double>> (wann_func_buf);   	
+}
+
+py::array_t<std::complex<double>>  get_bloch(int num_kpts, py::array_t<double> kpts, py::array_t<int> supercell, py::array_t<int> grid,
+										py::array_t<std::complex<double>, py::array::c_style | py::array::forcecast> WF0s)
+{
+	//Transform WF0s to u_mo
+
+	
+	py::buffer_info kpts_info = kpts.request();
+	const double * kpts_data = static_cast<double*>(kpts_info.ptr);
+	py::buffer_info supercell_info = supercell.request();
+	const int * supercell_data = static_cast<int*>(supercell_info.ptr);  
+	py::buffer_info grid_info = grid.request();
+	const int * grid_data = static_cast<int*>(grid_info.ptr);     
+	py::buffer_info WF0s_info = WF0s.request();
+	const std::complex<double> * WF0s_data = static_cast<std::complex<double>*>(WF0s_info.ptr);
+	int num_band = WF0s_info.shape[1];	
+	// if (input_info.shape[0] != num_kpts)
+		// throw std::runtime_error("input.shape[0] is not equal to the num_Ls");
+
+    int ngs1 = supercell_data[0];
+    int ngs2 = supercell_data[1];
+    int ngs3 = supercell_data[2]; 
+    int ngx = grid_data[0];
+    int ngy = grid_data[1];
+    int ngz = grid_data[2];     
+    int num_pts1 = ngx*ngs1;
+    int num_pts2 = ngy*ngs2;
+    int num_pts3 = ngz*ngs3;
+    double normalized = 1.0/num_kpts;
+    int Ngrid_t_num_band  = ngx*ngy*ngz*num_band;    
+    int num_pts3_nband = num_pts3*num_band;
+    int num_pts23_nband = num_pts2*num_pts3*num_band;
+    int size = num_kpts*Ngrid_t_num_band;
+    std::vector<std::complex<double>> u_mo(size,0);
+  
+    for (int kpt = 0; kpt < num_kpts; kpt++){
+        for (int nxx = -((ngs1)/2)*ngx; nxx < ((ngs1+1)/2)*ngx; nxx++){
+            int nx = nxx%ngx;
+            int nxxx = nxx + (ngs1/2)*ngx;
+            if(nx < 1) nx = nx + ngx;
+            for (int nyy = -((ngs2)/2)*ngy; nyy < ((ngs2+1)/2)*ngy; nyy++){
+                int ny = nyy%ngy;
+                int nyyy = nyy + (ngs2/2)*ngy;
+                if(ny < 1) ny = ny + ngy;
+                for (int nzz = -((ngs3)/2)*ngz; nzz < ((ngs3+1)/2)*ngz; nzz++){
+                    int nz = nzz%ngz;
+                    int nzzz = nzz + (ngs3/2)*ngz;
+                    if(nz < 1) nz = nz + ngz;
+ 
+                    double scalfac = kpts_data[kpt*3+0]*((float)(nxx-1)/(float)ngx)+ //
+                                     kpts_data[kpt*3+1]*((float)(nyy-1)/(float)ngy)+ //
+                                     kpts_data[kpt*3+2]*((float)(nzz-1)/(float)ngz);
+                              
+                    int npoint = (nx-1)*ngy*ngz + (ny-1)*ngz + nz-1;
+                    std::complex<double> catmp = std::exp(-2*consts::Pi*consts::Onecomp*scalfac);  
+                    for (int loop_w = 0; loop_w < num_band; loop_w++){   
+                        u_mo[kpt*Ngrid_t_num_band + npoint*num_band + loop_w] += normalized * catmp * WF0s_data[nxxx*num_pts23_nband + nyyy*num_pts3_nband + nzzz*num_band + loop_w];                         
+                    } 
+                }                
+            }            
+        }
+    }
+
+	size_t pkpts = num_kpts;
+	size_t pnpoint = ngx*ngy*ngz;  
+	size_t pnum_band = num_band;      
+	py::buffer_info u_mo_buf =
+		{
+			u_mo.data(),
+			sizeof(std::complex<double>),
+			py::format_descriptor<std::complex<double>>::format(),
+			3,
+			{pkpts,pnpoint,pnum_band},
+			{pnpoint*pnum_band*sizeof(std::complex<double>), pnum_band * sizeof(std::complex<double>), sizeof(std::complex<double>)}
+		};
+		
+	return py::array_t<std::complex<double>> (u_mo_buf);   	
+}
+
 PYBIND11_PLUGIN(libwannier90)
 {
 	py::module m("libwannier90", "A python/C++ wrapper for Wannier90");	
 	m.def("setup", &setup, "Run wannier90_setup to get necessary info to construct M and A matrices");
-	m.def("run", &run, "Run wannier90_run to get the MLWFs");	
+	m.def("run", &run, "Run wannier90_run to get the MLWFs");
+	m.def("get_WF0s", &get_WF0s, "construc WF0s");   
+	m.def("get_bloch", &get_bloch, "converse WFs to Bloch functions"); 
 	return m.ptr();
 }
