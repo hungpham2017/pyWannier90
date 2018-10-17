@@ -11,7 +11,7 @@ Construct one sigma-like WF from 2 Bloch states
 
 import numpy as np
 from pyscf.pbc import gto, dft, df
-import pywannier90
+from pyscf.pbc.tools import pywannier90
 
 
 cell = gto.Cell()
@@ -34,26 +34,16 @@ ekpt = kmf.run()
 num_wann = 2
 keywords = \
 '''
-begin projections
-random
-end projections
 exclude_bands : 3,4
-'''
-w90 = pywannier90.W90(kmf, nk, num_wann, other_keywords = keywords)
-w90.kernel()
-w90.export_AME()
-w90.plot_wf(supercell = [1,1,1])
-w90.export_unk(grid = [50,50,50])
-
-keywords = \
-'''
 begin projections
-random
+H:s
 end projections
-exclude_bands : 3,4
 wannier_plot = True
-wannier_plot_supercell = 1
+wannier_plot_supercell = 3 3 3
 '''
 
-w90 = pywannier90.W90(kmf, nk, num_wann, other_keywords = keywords)
-w90.kernel()
+w90 = pywannier90.W90(kmf, cell, nk, num_wann, other_keywords = keywords)
+w90.make_win()
+w90.setup()
+w90.export_unk(grid = [25,25,25])
+w90.kernel() 

@@ -11,7 +11,7 @@ Construct four sp3-like WFs from 9 Bloch states
 
 import numpy as np
 from pyscf.pbc import gto, dft, df
-import pywannier90
+from pyscf.pbc.tools import pywannier90
 
 cell = gto.Cell()
 cell.atom = '''
@@ -33,30 +33,16 @@ abs_kpts = cell.make_kpts(nk)
 kmf = dft.KUKS(cell, abs_kpts).mix_density_fit()
 kmf.xc = 'pbe'
 ekpt = kmf.run()
-	
-num_wann = 4
+
+num_wann = 4	
 keywords = \
 '''
+exclude_bands : 1,6-8
 begin projections
 C:sp3
 end projections
 '''
 
-w90 = pywannier90.W90(kmf, nk, num_wann, spin_up = False, other_keywords = keywords)
+w90 = pywannier90.W90(kmf, cell, nk, num_wann, other_keywords = keywords)
 w90.kernel()
-w90.plot_wf(wf_list=[0,1,2,3], supercell = [1,1,1])
-w90.export_unk()
-
-
-keywords = \
-'''
-begin projections
-C:sp3
-end projections
-wannier_plot = True
-wannier_plot_supercell = 1
-'''
-
-w90 = pywannier90.W90(kmf, nk, num_wann, spin_up = False, other_keywords = keywords)
-w90.kernel()
-w90.export_AME()
+w90.plot_wf(grid=[25,25,25], supercell=nk)
