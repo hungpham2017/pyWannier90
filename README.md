@@ -13,4 +13,4 @@
  - Compile the libwannier90 library: 
     source install.sh
  - Modify the libwannier90 directory in the pywannier90.py
- - In general, the libwannier90 library can be incorporated in any python-based electronic structure codes. However, it is highly recommended to use it with PySCF via pywannier90.py module
+ - In general, the libwannier90 library can be incorporated in any python-based electronic structure codes. However, it is highly recommended to use it with PySCF via pywannier90.py interface
