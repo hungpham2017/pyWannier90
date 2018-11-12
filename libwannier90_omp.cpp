@@ -14,6 +14,7 @@ email: pqh3.14@gmail.com
 #include <vector>
 #include <lawrap/blas.h>
 #include <lawrap/lapack.h>
+#include <omp.h>
 
 extern "C" {
 	
@@ -441,20 +442,25 @@ py::array_t<std::complex<double>>  get_WF0s(int num_kpts, py::array_t<double> kp
     int num_pts23_nband = num_pts2*num_pts3*num_band;
     int size = num_band*num_pts1*num_pts2*num_pts3;    
     std::vector<std::complex<double>> wann_func(size,0);
+  
 
-    for (int kpt = 0; kpt < num_kpts ; kpt++){
-        for (int nxx = -((ngs1)/2)*ngx; nxx < ((ngs1+1)/2)*ngx; nxx++){
-            int nx = nxx%ngx;
-            int nxxx = nxx + (ngs1/2)*ngx;
-            if(nx < 1) nx = nx + ngx;
-            for (int nyy = -((ngs2)/2)*ngy; nyy < ((ngs2+1)/2)*ngy; nyy++){
+#pragma omp parallel default(none) \
+shared(Ngrid_t_num_band,ngs1,ngs2,ngs3,ngx,ngy,ngz,num_pts3_nband,num_pts23_nband,num_kpts,num_band,kpts_data,u_mo_data,wann_func)	
+{        
+#pragma omp for schedule(static) collapse(3)          
+    for (int nxx = -((ngs1)/2)*ngx; nxx < ((ngs1+1)/2)*ngx; nxx++){              
+        for (int nyy = -((ngs2)/2)*ngy; nyy < ((ngs2+1)/2)*ngy; nyy++){                        
+            for (int nzz = -((ngs3)/2)*ngz; nzz < ((ngs3+1)/2)*ngz; nzz++){   
+                int nx = nxx%ngx;
+                int nxxx = nxx + (ngs1/2)*ngx;
+                if(nx < 1) nx = nx + ngx;              
                 int ny = nyy%ngy;
                 int nyyy = nyy + (ngs2/2)*ngy;
-                if(ny < 1) ny = ny + ngy;
-                for (int nzz = -((ngs3)/2)*ngz; nzz < ((ngs3+1)/2)*ngz; nzz++){
-                    int nz = nzz%ngz;
-                    int nzzz = nzz + (ngs3/2)*ngz;
-                    if(nz < 1) nz = nz + ngz;
+                if(ny < 1) ny = ny + ngy;            
+                int nz = nzz%ngz;
+                int nzzz = nzz + (ngs3/2)*ngz;
+                if(nz < 1) nz = nz + ngz;    
+                for (int kpt = 0; kpt < num_kpts ; kpt++){                    
                     double scalfac = kpts_data[kpt*3+0]*((float)(nxx-1)/(float)ngx)+ //
                               kpts_data[kpt*3+1]*((float)(nyy-1)/(float)ngy)+ //
                               kpts_data[kpt*3+2]*((float)(nzz-1)/(float)ngz);
@@ -464,10 +470,11 @@ py::array_t<std::complex<double>>  get_WF0s(int num_kpts, py::array_t<double> kp
                     for (int loop_w = 0; loop_w < num_band; loop_w++){  
                         wann_func[nxxx*num_pts23_nband + nyyy*num_pts3_nband + nzzz*num_band + loop_w] += catmp*u_mo_data[kpt*Ngrid_t_num_band + npoint*num_band + loop_w];   
                     } 
-                }                
-            }            
+                }
+            }
         }
     }
+}    
 
 	size_t pnum_band = num_band;
 	size_t pnum_pts123 = num_pts1*num_pts2*num_pts3;             

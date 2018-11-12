@@ -5,10 +5,11 @@
 
 
 ### How to compile pyWannier90
- - Required: gxx, cmake, pybind11, gfortran
+ - Required: g++, gfortran, cmake, pybind11, openmp (Optional)
  - First compile the wannier90 (http://www.wannier.org/): note that the flag "-fPIC" is needed in make.inc.
    Only wannier90-2.1.0 has been tested.
  - Modify the Wannier90 directory in the install.sh
+ - For the OpenMP version, simply replace "libwannier90.cpp" by "libwannier90_omp.cpp" in the CMakeLists.txt file
  - Compile the libwannier90 library: 
     source install.sh
  - Modify the libwannier90 directory in the pywannier90.py
