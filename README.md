@@ -4,7 +4,7 @@
 <img src="https://github.com/hungpham2017/pyWannier90/blob/master/doc/Si_sp3.png" width="500" align="middle">
 
 # News:
-- pyWannier90 is now available for wannier90 community, check it out [here](http://wannier.org).
+- pyWannier90 is now available for wannier90 community, check it out [here](http://www.wannier.org/download/).
 
 # Current functions:
 - Exporting *.xsf for VESTA
