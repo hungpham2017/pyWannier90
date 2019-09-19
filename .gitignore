@@ -3,20 +3,13 @@
 *.panfs*
 __pycache__
 .cache
-CMakeFiles
-CMakeCache.txt
-Makefile
-cmake_install.cmake
-libdmet*
 pyDMET.egg-info
 dist/*
+tests*
+*.so
 lib/build
-lead.wout
-lead.chk
-w90.mod
 build
-obj
-wannier90*
+
 
 # Compiled source #
 ###################
