@@ -10,6 +10,8 @@ cmake_install.cmake
 libdmet*
 pyDMET.egg-info
 dist/*
+tests*
+*.so
 lib/build
 lead.wout
 lead.chk

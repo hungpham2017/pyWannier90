@@ -1,16 +1,20 @@
+[![License](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
+![GitHub last commit](https://img.shields.io/github/last-commit/hungpham2017/pyWannier90.svg?color=green)
+![GitHub issues](https://img.shields.io/github/issues-raw/hungpham2017/pyWannier90.svg?color=crimson)
+
 # pyWannier90: A Wannier90 python interface for PySCF 
 
 
 <img src="https://github.com/hungpham2017/pyWannier90/blob/master/doc/Si_sp3.png" width="500" align="middle">
 
+# News:
+- pyWannier90 is now available for wannier90 community, check it out [here](http://www.wannier.org/download/).
 
-### How to compile pyWannier90
- - Required: g++, gfortran, cmake, pybind11, openmp (Optional)
- - First compile the wannier90 (http://www.wannier.org/): note that the flag "-fPIC" is needed in make.inc.
-   Only wannier90-2.1.0 has been tested.
- - Modify the Wannier90 directory in the install.sh
- - For the OpenMP version, simply replace "libwannier90.cpp" by "libwannier90_omp.cpp" in the CMakeLists.txt file
- - Compile the libwannier90 library: 
-    source install.sh
- - Modify the libwannier90 directory in the pywannier90.py
- - In general, the libwannier90 library can be incorporated in any python-based electronic structure codes. However, it is highly recommended to use it with PySCF via pywannier90.py interface
+# Current functions:
+- Exporting *.xsf for VESTA
+- Save and load a wave function from a PySCF calculations.
+
+# Future functions:
+- Testing with wannier90-3.0.0
+- Constructing MLWF-based Hamiltonian for correlation treatment
+- Topological analysis using MLWFs 
