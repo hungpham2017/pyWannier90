@@ -2,19 +2,18 @@
 ![GitHub last commit](https://img.shields.io/github/last-commit/hungpham2017/pyWannier90.svg?color=green)
 ![GitHub issues](https://img.shields.io/github/issues-raw/hungpham2017/pyWannier90.svg?color=crimson)
 
-# pyWannier90: A Wannier90 python interface for PySCF 
+# pyWannier90: A Wannier90 python interface
 
 
 <img src="https://github.com/hungpham2017/pyWannier90/blob/master/doc/Si_sp3.png" width="500" align="middle">
 
-# News:
+## News:
 - pyWannier90 is now available for wannier90 community, check it out [here](http://www.wannier.org/download/).
+- pyWannier90 only supports wannier90-3.0.0 from now on. 
 
-# Current functions:
-- Exporting *.xsf for VESTA
-- Save and load a wave function from a PySCF calculations.
+## Ab inito codes:
+- PySCF > 1.5 
+- VASP via the [MCU package](https://hungpham2017.github.io/mcu/)
 
-# Future functions:
-- Testing with wannier90-3.0.0
-- Constructing MLWF-based Hamiltonian for correlation treatment
+## Future functions:
 - Topological analysis using MLWFs 
