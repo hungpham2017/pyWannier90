@@ -18,10 +18,11 @@ wannier90 can be used in the library mode via pyWannier90 in conjunction with an
 
 ## Why pyWannier90?
 - If you would like to construct MLWFs from a PySCF calcultion.
-- VASP has its own interface (pw2wannier90.x) and must be compiled with this function turned on. 
-However, anytime one call wannier90 (for example using different initial guess), a SCF must be run.
-This is quite expensive and unneccessary. pyWannier90 can construct MLWFs from a WAVECAR containing plane-wave coefficients.
+- pyWannier90 can construct MLWFs from a WAVECAR containing plane-wave coefficients.
 Hence, only one VASP calculation is needed to produce WAVECAR and no special compilation for VASP.
+VASP has its own interface (pw2wannier90.x) and must be compiled with this function turned on. 
+However, anytime one call wannier90 (for example using different initial guess), a SCF must be run.
+This is quite expensive and unneccessary. 
 
 ## Future functions:
 - Topological analysis using MLWFs 
