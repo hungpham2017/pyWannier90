@@ -3,8 +3,8 @@
 # User defines the compiling parameters #
 #----------------START------------------#
 W90DIR =/panfs/roc/groups/6/gagliard/phamx494/wannier90-3.0.0
-LIBDIR =/panfs/roc/groups/6/gagliard/phamx494/anaconda/env/dnn
-USE_INTEL = no
+LIBDIR =/panfs/roc/groups/6/gagliard/phamx494/intel
+USE_INTEL = yes
 #-----------------END-------------------#
 
 ifeq ($(USE_INTEL), yes)
