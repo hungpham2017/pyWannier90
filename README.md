@@ -26,3 +26,7 @@ This is quite expensive and unneccessary.
 
 ## Future functions:
 - Topological analysis using MLWFs 
+
+## How to cite?
+Please cite this paper when you use pyWannier90 code in your research:
+H. Q. Pham, M. R. Hermes, L. Gagliardi; Periodic Electronic Structure Calculations with the Density Matrix Embedding Theory, [**J. Chem. Theory Comput.**, **2019**](https://pubs.acs.org/doi/abs/10.1021/acs.jctc.9b00939), ASAP.
