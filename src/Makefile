@@ -3,12 +3,13 @@
 # User defines the compiling parameters #
 #----------------START------------------#
 W90DIR =/panfs/roc/groups/6/gagliard/phamx494/wannier90-3.0.0
-LIBDIR =/panfs/roc/groups/6/gagliard/phamx494/anaconda/env/dnn
-USE_INTEL = no
+#LIBDIR =/panfs/roc/groups/6/gagliard/phamx494/intel
+LIBDIR =/panfs/roc/intel/x86_64/2018/parallel_studio_xe_msi/compilers_and_libraries_2018.0.128/linux
+USE_INTEL = yes
 #-----------------END-------------------#
 
 ifeq ($(USE_INTEL), yes)
-	CPP = ~/intel/bin/icpc
+	CPP = icpc
 	LIBS = -L$(LIBDIR)/mkl/lib/intel64 -lmkl_core -lmkl_intel_lp64 -lmkl_sequential \
 	-Wl,-rpath,$(LIBDIR)/lib/intel64 -L$(LIBDIR)/lib/intel64 -limf -lintlc -liomp5 -lifcore \
 	-Wl,-rpath,$(W90DIR) -L$(W90DIR) -lwannier

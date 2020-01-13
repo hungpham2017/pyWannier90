@@ -13,7 +13,7 @@ email: pqh3.14@gmail.com
 #include <complex>
 #include <vector>
 
-#define gfortran
+#define ifort
 
 extern "C" {
 	
@@ -28,7 +28,7 @@ extern "C" {
 	 double* proj_s_qaxis_loc);
 
 	void w90lib_mp_wannier_run_(int* mp_grid_loc, int* num_kpts_loc, double* real_lattice_loc, 					//input
-	double* recip_lattice_loc, double* kpt_latt_loc, int* num_bands_tot, int* num_bands_loc, int* num_wann_loc, int* nntot_loc, 	//input
+	double* recip_lattice_loc, double* kpt_latt_loc, int* num_bands_loc, int* num_wann_loc, int* nntot_loc, 	//input
 	int* num_atoms_loc, int* atom_atomic_loc, double* atoms_cart_loc, int* gamma_only_boolean, 										//input
 	std::complex<double>* M_matrix_loc, std::complex<double>* A_matrix_loc, double* eigenvalues_loc, 								//input
 	std::complex<double>* U_matrix_loc, std::complex<double>* U_matrix_opt_loc, int* lwindow_loc, 									//output
@@ -44,7 +44,7 @@ extern "C" {
 	 double* proj_s_qaxis_loc);
 
 	void __w90lib_MOD_wannier_run(int* mp_grid_loc, int* num_kpts_loc, double* real_lattice_loc, 					//input
-	double* recip_lattice_loc, double* kpt_latt_loc, int* num_bands_tot, int* num_bands_loc, int* num_wann_loc, int* nntot_loc, 	//input
+	double* recip_lattice_loc, double* kpt_latt_loc, int* num_bands_loc, int* num_wann_loc, int* nntot_loc, 	//input
 	int* num_atoms_loc, int* atom_atomic_loc, double* atoms_cart_loc, int* gamma_only_boolean, 										//input
 	std::complex<double>* M_matrix_loc, std::complex<double>* A_matrix_loc, double* eigenvalues_loc, 								//input
 	std::complex<double>* U_matrix_loc, std::complex<double>* U_matrix_opt_loc, int* lwindow_loc, 									//output
@@ -288,7 +288,7 @@ std::vector<py::array_t<double>> setup(py::array_t<int> mp_grid_loc, int* num_kp
 
 
 std::vector<py::array_t<std::complex<double>>> run(py::array_t<int> mp_grid_loc, int* num_kpts_loc, py::array_t<double> real_lattice_loc,
-				py::array_t<double>  recip_lattice_loc, py::array_t<double>  kpt_latt_loc, int* num_bands_tot, int* num_bands_loc, int* num_wann_loc, int* nntot_loc,  		 					
+				py::array_t<double>  recip_lattice_loc, py::array_t<double>  kpt_latt_loc, int* num_bands_loc, int* num_wann_loc, int* nntot_loc,  		 					
 			int* num_atoms_loc, py::array_t<int> atom_atomic_loc, py::array_t<double>  atoms_cart_loc, int* gamma_only_boolean,		 										
 			py::array_t<std::complex<double>, py::array::c_style | py::array::forcecast> M_matrix_loc, 
             py::array_t<std::complex<double>, py::array::c_style | py::array::forcecast> A_matrix_loc, 
@@ -347,14 +347,14 @@ std::vector<py::array_t<std::complex<double>>> run(py::array_t<int> mp_grid_loc,
 	/////////////////////
 #ifdef ifort
 	w90lib_mp_wannier_run_(mp_grid, num_kpts_loc, real_lattice, 							            //input
-	recip_lattice, kpt_latt, num_bands_tot, num_bands_loc, num_wann_loc, nntot_loc, 					//input
+	recip_lattice, kpt_latt, num_bands_loc, num_wann_loc, nntot_loc, 					//input
 	num_atoms_loc, atom_atomic, atoms_cart, gamma_only_boolean, 										//input
 	M_matrix, A_matrix, eigenvalues, 																	//input
 	U_matrix_loc,  U_matrix_opt_loc, lwindow_loc, 														//output
 	wann_centres_loc, wann_spreads_loc, spread_loc);													//output
 #else
 	__w90lib_MOD_wannier_run(mp_grid, num_kpts_loc, real_lattice, 							            //input
-	recip_lattice, kpt_latt, num_bands_tot, num_bands_loc, num_wann_loc, nntot_loc, 					//input
+	recip_lattice, kpt_latt, num_bands_loc, num_wann_loc, nntot_loc, 					//input
 	num_atoms_loc, atom_atomic, atoms_cart, gamma_only_boolean, 										//input
 	M_matrix, A_matrix, eigenvalues, 																	//input
 	U_matrix_loc,  U_matrix_opt_loc, lwindow_loc, 														//output

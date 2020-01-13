@@ -275,7 +275,7 @@ subroutine wannier_setup(mp_grid_loc, num_kpts_loc, &
 end subroutine wannier_setup
 
 subroutine wannier_run(mp_grid_loc, num_kpts_loc, &
-                       real_lattice_loc, recip_lattice_loc, kpt_latt_loc, num_bands_tot, num_bands_loc, &
+                       real_lattice_loc, recip_lattice_loc, kpt_latt_loc, num_bands_loc, &
                        num_wann_loc, nntot_loc, num_atoms_loc, atom_atomic_loc, &
                        atoms_cart_loc, gamma_only_boolean, M_matrix_loc, A_matrix_loc, eigenvalues_loc, &
                        U_matrix_loc, U_matrix_opt_loc, lwindow_loc, wann_centres_loc, &
