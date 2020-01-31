@@ -736,7 +736,7 @@ if __name__ == '__main__':
 
     nk = [1, 1, 1]
     abs_kpts = cell.make_kpts(nk)
-    kmf = dft.KRKS(cell, abs_kpts).mix_density_fit()
+    kmf = pscf.KKS(cell, abs_kpts).mix_density_fit()
     kmf.xc = 'pbe'
     ekpt = kmf.run()
     pywannier90.save_kmf(kmf, 'chk_mf')  # Save the wave function
@@ -770,5 +770,5 @@ if __name__ == '__main__':
     w90 = pywannier90.W90(kmf, cell, nk, num_wann, other_keywords = keywords)
     w90.make_win()
     w90.setup()
-    w90.export_unk(grid = grid)
+    w90.export_unk(grid = [25,25,25])
     w90.kernel()
