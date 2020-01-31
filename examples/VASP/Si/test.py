@@ -1,5 +1,5 @@
 import sys
-from mcu.vasp import pywannier90_vasp as pyw90
+from mcu.wannier90 import pywannier90_vasp as pyw90
 import subprocess 
 
 nk = [3, 3, 3] 
