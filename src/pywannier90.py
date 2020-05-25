@@ -72,7 +72,7 @@ def transform(x_vec, z_vec):
     x_vec = x_vec/np.linalg.norm(np.asarray(x_vec))
     z_vec = z_vec/np.linalg.norm(np.asarray(z_vec))    
     assert x_vec.dot(z_vec) == 0    # x and z have to be orthogonal to one another
-    y_vec = np.cross(x_vec,z_vec)
+    y_vec = -np.cross(x_vec,z_vec)
     new = np.asarray([x_vec, y_vec, z_vec])
     original = np.asarray([[1,0,0],[0,1,0],[0,0,1]])
     
@@ -83,7 +83,7 @@ def transform(x_vec, z_vec):
             
     return tran_matrix.T
 
-def cartesian_prod(arrays, out=None, order = 'C'):
+def cartesian_prod(arrays, out=None, order='C'):
     '''
     This function is similar to lib.cartesian_prod of PySCF, except the output can be in Fortran or in C order
     '''
@@ -104,13 +104,13 @@ def cartesian_prod(arrays, out=None, order = 'C'):
 
     return tout.reshape((nd,-1),order=order).T
     
-def periodic_grid(cell, grid = [50,50,50], supercell = [1,1,1], order = 'C'):
+def periodic_grid(cell, grid=[50,50,50], supercell=[1,1,1], order='C'):
     '''
     Generate a periodic grid for the unit/computational cell in F/C order
     '''    
     ngrid = np.asarray(grid)
     qv = cartesian_prod([np.arange(-ngrid[i]*(supercell[i]//2),ngrid[i]*((supercell[i]+1)//2)) for i in range(3)], order=order)   
-    a_frac = np.einsum('i,ij->ij', 1./ngrid, cell.lattice_vectors())
+    a_frac = lib.einsum('i,ij->ij', 1./ngrid, cell.lattice_vectors())
     coords = np.dot(qv, a_frac)
     
     # Compute weight    
@@ -120,7 +120,7 @@ def periodic_grid(cell, grid = [50,50,50], supercell = [1,1,1], order = 'C'):
     weights[:] = cell.vol / ngrids / ncells
     return coords, weights
     
-def R_r(r_norm, r = 1, zona = 1):
+def R_r(r_norm, r=1, zona=1):
     '''
     Radial functions used to compute \Theta_{l,m_r}(\theta,\phi)
     '''    
@@ -137,50 +137,41 @@ def R_r(r_norm, r = 1, zona = 1):
 def theta(func, cost, phi):
     '''
     Basic angular functions (s,p,d,f) used to compute \Theta_{l,m_r}(\theta,\phi)
-    '''    
-    if     func == 's':                            # s
+    ref: Table 3.1 of the Wannier90 User guide
+        Link: https://github.com/wannier-developers/wannier90/raw/v3.1.0/doc/compiled_docs/user_guide.pdf
+    '''  
+    sint = np.sqrt(1 - cost**2) 
+    if   func == 's':
         theta = 1 / np.sqrt(4 * np.pi) * np.ones([cost.shape[0]])
     elif func == 'pz':
         theta = np.sqrt(3 / 4 / np.pi) * cost
-    elif func == 'px':
-        sint = np.sqrt(1 - cost**2)        
+    elif func == 'px':       
         theta = np.sqrt(3 / 4 / np.pi) * sint * np.cos(phi)
-    elif func == 'py':
-        sint = np.sqrt(1 - cost**2)        
+    elif func == 'py':       
         theta = np.sqrt(3 / 4 / np.pi) * sint * np.sin(phi)    
     elif func == 'dz2': 
         theta = np.sqrt(5 / 16 / np.pi) * (3*cost**2 - 1)
-    elif func == 'dxz':
-        sint = np.sqrt(1 - cost**2)        
+    elif func == 'dxz':        
         theta = np.sqrt(15 / 4 / np.pi) * sint * cost * np.cos(phi)
-    elif func == 'dyz':
-        sint = np.sqrt(1 - cost**2)        
+    elif func == 'dyz':       
         theta = np.sqrt(15 / 4 / np.pi) * sint * cost * np.sin(phi)
-    elif func == 'dx2-y2':
-        sint = np.sqrt(1 - cost**2)        
+    elif func == 'dx2-y2':     
         theta = np.sqrt(15 / 16 / np.pi) * (sint**2) * np.cos(2*phi)
-    elif func == 'pxy':
-        sint = np.sqrt(1 - cost**2)        
+    elif func == 'dxy':    
         theta = np.sqrt(15 / 16 / np.pi) * (sint**2) * np.sin(2*phi)
     elif func == 'fz3':    
         theta = np.sqrt(7) / 4 / np.sqrt(np.pi) * (5*cost**3 - 3*cost)
-    elif func == 'fxz2':
-        sint = np.sqrt(1 - cost**2)        
+    elif func == 'fxz2':     
         theta = np.sqrt(21) / 4 / np.sqrt(2*np.pi) * (5*cost**2 - 1) * sint * np.cos(phi)
-    elif func == 'fyz2':
-        sint = np.sqrt(1 - cost**2)        
+    elif func == 'fyz2':       
         theta = np.sqrt(21) / 4 / np.sqrt(2*np.pi) * (5*cost**2 - 1) * sint * np.sin(phi)
-    elif func == 'fz(x2-y2)':
-        sint = np.sqrt(1 - cost**2)        
+    elif func == 'fz(x2-y2)':     
         theta = np.sqrt(105) / 4 / np.sqrt(np.pi) * sint**2 * cost * np.cos(2*phi)
-    elif func == 'fxyz':
-        sint = np.sqrt(1 - cost**2)    
+    elif func == 'fxyz':   
         theta = np.sqrt(105) / 4 / np.sqrt(np.pi) * sint**2 * cost * np.sin(2*phi)    
-    elif func == 'fx(x2-3y2)':
-        sint = np.sqrt(1 - cost**2)    
+    elif func == 'fx(x2-3y2)':  
         theta = np.sqrt(35) / 4 / np.sqrt(2*np.pi) * sint**3 * (np.cos(phi)**2 - 3*np.sin(phi)**2) * np.cos(phi)
-    elif func == 'fy(3x2-y2)':
-        sint = np.sqrt(1 - cost**2)    
+    elif func == 'fy(3x2-y2)':    
         theta = np.sqrt(35) / 4 / np.sqrt(2*np.pi) * sint**3 * (3*np.cos(phi)**2 - np.sin(phi)**2) * np.sin(phi)
     
     return theta
@@ -188,12 +179,13 @@ def theta(func, cost, phi):
 def theta_lmr(l, mr, cost, phi):
     '''
     Compute the value of \Theta_{l,m_r}(\theta,\phi)
-    ref: Table 3.1 and 3.2 of Chapter 3, wannier90 User Guide
+    ref: Table 3.1 and 3.2 of the Wannier90 User guide
+        Link: https://github.com/wannier-developers/wannier90/raw/v3.1.0/doc/compiled_docs/user_guide.pdf
     '''
     assert l in [0,1,2,3,-1,-2,-3,-4,-5]
     assert mr in [1,2,3,4,5,6,7]
     
-    if     l == 0:                            # s
+    if    l == 0:                        # s
         theta_lmr = theta('s', cost, phi)
     elif (l == 1) and (mr == 1):         # pz
         theta_lmr = theta('pz', cost, phi)
@@ -210,7 +202,7 @@ def theta_lmr(l, mr, cost, phi):
     elif (l == 2) and (mr == 4):         # dx2-y2
         theta_lmr = theta('dx2-y2', cost, phi)
     elif (l == 2) and (mr == 5):         # pxy
-        theta_lmr = theta('pxy', cost, phi)
+        theta_lmr = theta('dxy', cost, phi)
     elif (l == 3) and (mr == 1):         # fz3    
         theta_lmr = theta('fz3', cost, phi)
     elif (l == 3) and (mr == 2):         # fxz2
@@ -250,9 +242,9 @@ def theta_lmr(l, mr, cost, phi):
     elif (l == -4) and (mr == 3):         # sp3d-3
         theta_lmr = 1/np.sqrt(3) * theta('s', cost, phi) + 2/np.sqrt(6) * theta('px', cost, phi)
     elif (l == -4) and (mr == 4):         # sp3d-4
-        theta_lmr = 1/np.sqrt(2) (theta('pz', cost, phi) + theta('dz2', cost, phi))
+        theta_lmr = 1/np.sqrt(2) * (theta('pz', cost, phi) + theta('dz2', cost, phi))
     elif (l == -4) and (mr == 5):         # sp3d-5
-        theta_lmr = 1/np.sqrt(2) (-theta('pz', cost, phi) + theta('dz2', cost, phi))
+        theta_lmr = 1/np.sqrt(2) * (-theta('pz', cost, phi) + theta('dz2', cost, phi))
     elif (l == -5) and (mr == 1):         # sp3d2-1
         theta_lmr = 1/np.sqrt(6) * theta('s', cost, phi) - 1/np.sqrt(2) *theta('px', cost, phi) - 1/np.sqrt(12) *theta('dz2', cost, phi) \
                     + 1/2 *theta('dx2-y2', cost, phi)
@@ -273,7 +265,7 @@ def theta_lmr(l, mr, cost, phi):
     return theta_lmr
     
 
-def g_r(grids_coor, site, l, mr, r, zona, x_axis = [1,0,0], z_axis = [0,0,1], unit = 'B'):
+def g_r(grids_coor, site, l, mr, r, zona, x_axis=[1,0,0], z_axis=[0,0,1], unit='B'):
     '''
     Evaluate the projection function g(r) or \Theta_{l,m_r}(\theta,\phi) on a grid
     ref: Chapter 3, wannier90 User Guide
@@ -285,33 +277,32 @@ def g_r(grids_coor, site, l, mr, r, zona, x_axis = [1,0,0], z_axis = [0,0,1], un
         theta_lmr                    : an array (ngrid, value) of g(r)
 
     '''
-
+    
     unit_conv = 1
     if unit == 'A': unit_conv = param.BOHR
     
     r_vec = (grids_coor - site)        
-    r_vec = np.einsum('iv,uv ->iu', r_vec, transform(x_axis, z_axis))
+    r_vec = lib.einsum('iv,uv ->iu', r_vec, transform(x_axis, z_axis))
     r_norm = np.linalg.norm(r_vec,axis=1) 
     if (r_norm < 1e-8).any() == True:
         r_vec = (grids_coor - site - 1e-5) 
-        r_vec = np.einsum('iv,uv ->iu', r_vec, transform(x_axis, z_axis))
+        r_vec = lib.einsum('iv,uv ->iu', r_vec, transform(x_axis, z_axis))
         r_norm = np.linalg.norm(r_vec,axis=1)        
     cost = r_vec[:,2]/r_norm
     
     phi = np.empty_like(r_norm)
-    for point in range(phi.shape[0]):
-        if r_vec[point,0] > 1e-8:
-            phi[point] = np.arctan(r_vec[point,1]/r_vec[point,0])
-        elif r_vec[point,0] < -1e-8:
-            phi[point] = np.arctan(r_vec[point,1]/r_vec[point,0]) + np.pi
-        else:
-            phi[point] = np.sign(r_vec[point,1]) * 0.5 * np.pi
+    larger_idx = r_vec[:, 0] > 1e-8
+    smaller_idx = r_vec[:, 0] < -1e-8   
+    neither_idx = larger_idx + smaller_idx == False
+    phi[larger_idx] = np.arctan(r_vec[larger_idx,1]/r_vec[larger_idx,0])
+    phi[smaller_idx] = np.arctan(r_vec[smaller_idx,1]/r_vec[smaller_idx,0])  + np.pi      
+    phi[neither_idx] = np.sign(r_vec[neither_idx,1]) * 0.5 * np.pi
     
     return theta_lmr(l, mr, cost, phi) * R_r(r_norm * unit_conv, r = r, zona = zona)
     
     
 class W90:
-    def __init__(self, kmf, cell, mp_grid, num_wann, gamma = False, spinors = False, spin_up = None, other_keywords = None):
+    def __init__(self, kmf, cell, mp_grid, num_wann, gamma=False, spinors=False, spin_up=None, other_keywords=None):
         
         if isinstance(kmf, str) == True:       
             self.kmf = load_kmf(kmf)
@@ -369,7 +360,6 @@ class W90:
         
         # Others
         self.use_bloch_phases = False
-        self.check_complex = False
         self.spin_up = spin_up
         if np.mod(self.cell.nelectron,2) !=0:
             if spin_up == True:
@@ -399,7 +389,7 @@ class W90:
         '''        
         
         win_file = open('wannier90.win', "w")
-        win_file.write('! Basic input\n')
+        win_file.write('! Basic input generated by the pyWannier90\n')
         win_file.write('\n')
         win_file.write('num_bands       = %d\n' % (self.num_bands_tot))
         win_file.write('num_wann       = %d\n' % (self.num_wann))
@@ -443,11 +433,37 @@ class W90:
                 k_id2 = self.nn_list[nn, k_id, 0] - 1
                 k2_ = self.kpt_latt_loc[k_id2]
                 k2_scaled = k2_ + self.nn_list[nn, k_id, 1:4]
-                k2 = self.cell.get_abs_kpts(k2_scaled)                  
+                k2 = self.cell.get_abs_kpts(k2_scaled)       
                 s_AO = df.ft_ao.ft_aopair(self.cell, -k2+k1, kpti_kptj=[k2,k1], q = np.zeros(3))[0]
                 Cm = self.mo_coeff_kpts[k_id][:,self.band_included_list]
                 Cn = self.mo_coeff_kpts[k_id2][:,self.band_included_list]    
-                M_matrix_loc[k_id, nn,:,:] = np.einsum('nu,vm,uv->nm', Cn.T.conj(), Cm, s_AO, optimize = True).conj()
+                M_matrix_loc[k_id, nn,:,:] = lib.einsum('nu,vm,uv->nm', Cn.T.conj(), Cm, s_AO).conj()
+                
+        return M_matrix_loc
+        
+    def read_M_mat(self, filename=None):
+        '''
+        Read the ovelap matrix: M_{m,n}^{(\mathbf{k,b})} from seedname.mnn
+        '''    
+        if filename is None: filename = 'wannier90.mmn'
+        assert os.path.exists(filename), "Cannot find " + filename
+        
+        with open(filename, 'r') as f:
+            data = f.readlines()
+            num_bands_loc, num_kpts_loc, nntot_loc = np.int64(data[1].split())
+            data = data[2:]
+            nn_list = []
+            nline = num_bands_loc**2 + 1
+            M_matrix_loc = np.empty([num_kpts_loc, nntot_loc, num_bands_loc, num_bands_loc], dtype = np.complex128)
+            jump = 0
+            for kpt in range(num_kpts_loc):
+                for nn in range(nntot_loc):
+                    temp = data[jump : jump + nline]
+                    nn_list.append(np.int64(temp[0].split()))
+                    val_in_float = np.float64(" ".join(temp[1:]).split()).reshape(-1,2)
+                    val_in_complex = val_in_float[:,0] + 1j * val_in_float[:,1]
+                    M_matrix_loc[kpt, nn] = val_in_complex.reshape(num_bands_loc, num_bands_loc)
+                    jump += nline
                 
         return M_matrix_loc
 
@@ -479,15 +495,32 @@ class W90:
                 z_axis = self.proj_z[ith_wann]                                
                 gr = g_r(coords, abs_site, l, mr, r, zona, x_axis, z_axis, unit = 'B')
                 ao_L0 = numint.eval_ao(self.cell, coords) 
-                s_aoL0_g = np.einsum('i,i,iv->v', weights, gr, ao_L0, optimize = True)
+                s_aoL0_g = lib.einsum('i,i,iv->v', weights, gr, ao_L0)
                 for k_id in range(self.num_kpts_loc):
                     kpt = self.cell.get_abs_kpts(self.kpt_latt_loc[k_id])              
                     mo_included = self.mo_coeff_kpts[k_id][:,self.band_included_list] 
                     s_kpt = self.cell.pbc_intor('int1e_ovlp', hermi=1, kpts=kpt, pbcopt=lib.c_null_ptr())                    
-                    A_matrix_loc[k_id,ith_wann,:] = np.einsum('v,vu,um->m', s_aoL0_g, s_kpt, mo_included, optimize = True).conj()
+                    A_matrix_loc[k_id,ith_wann,:] = lib.einsum('v,vu,um->m', s_aoL0_g, s_kpt, mo_included, optimize = True).conj()
                     
         return A_matrix_loc 
 
+    def read_A_mat(self, filename=None):
+        '''
+        Read the ovelap matrix: M_{m,n}^{(\mathbf{k,b})} from seedname.mnn
+        '''    
+        if filename is None: filename = 'wannier90.amn'
+        assert os.path.exists(filename), "Cannot find " + filename
+        
+        with open(filename, 'r') as f:
+            data = f.readlines()
+            num_bands_loc, num_kpts_loc, num_wann_loc = np.int64(data[1].split())
+            data = data[2:]
+            A_matrix_loc = np.empty([num_kpts_loc, num_wann_loc, num_bands_loc], dtype = np.complex128)
+            val_in_float = np.float64(" ".join(data).split()).reshape(-1,5)
+            A_matrix_loc = (val_in_float[:,3] + 1j * val_in_float[:,4]).reshape(num_kpts_loc, num_wann_loc, num_bands_loc)
+                
+        return A_matrix_loc
+        
     def get_epsilon_mat(self):
         '''
         Construct the eigenvalues matrix: \epsilon_{n}^(\mathbf{k})
@@ -559,7 +592,139 @@ class W90:
         self.wann_spreads = wann_spreads.real
         self.spread = spread.real
     
-    def export_unk(self, grid = [50,50,50]):
+    def get_wigner_seitz_supercell(self, ws_search_size=[2,2,2], ws_distance_tol=1e-6):
+        '''
+        Return a grid that contains all the lattice within the Wigner-Seitz supercell
+        Ref: the hamiltonian_wigner_seitz(count_pts) in wannier90/src/hamittonian.F90
+        '''
+        
+        real_metric = self.real_lattice_loc.T @ self.real_lattice_loc
+        dist_dim = np.prod(2 * (np.asarray(ws_search_size) + 1) + 1)
+        ndegen = []
+        irvec = []
+        mp_grid = np.asarray(self.mp_grid_loc)
+        n1_range =  np.arange(-ws_search_size[0] * mp_grid[0], ws_search_size[0]*mp_grid[0] + 1)
+        n2_range =  np.arange(-ws_search_size[1] * mp_grid[1], ws_search_size[1]*mp_grid[1] + 1)
+        n3_range =  np.arange(-ws_search_size[2] * mp_grid[2], ws_search_size[2]*mp_grid[2] + 1)
+        x, y, z = np.meshgrid(n1_range, n2_range, n3_range)
+        n_list = np.vstack([z.flatten('F'), x.flatten('F'), y.flatten('F')]).T
+        i1 = np.arange(- ws_search_size[0] - 1, ws_search_size[0] + 2)
+        i2 = np.arange(- ws_search_size[1] - 1, ws_search_size[1] + 2)
+        i3 = np.arange(- ws_search_size[2] - 1, ws_search_size[2] + 2)
+        x, y, z = np.meshgrid(i1, i2, i3)
+        i_list = np.vstack([z.flatten('F'), x.flatten('F'), y.flatten('F')]).T
+
+        nrpts = 0
+        for n in n_list: 
+            # Calculate |r-R|^2
+            ndiff = n - i_list * mp_grid
+            dist = (ndiff @ real_metric @ ndiff.T).diagonal()
+            
+            dist_min = dist.min()
+            if abs(dist[(dist_dim + 1)//2 -1] - dist_min) < ws_distance_tol**2:
+                temp = 0
+                for i in range(0, dist_dim):
+                    if (abs(dist[i] - dist_min) < ws_distance_tol**2):
+                        temp = temp + 1
+                ndegen.append(temp)
+                irvec.append(n.tolist())
+                if (n**2).sum() < 1.e-10: rpt_origin = nrpts
+                nrpts = nrpts + 1
+    
+        irvec = np.asarray(irvec)
+        ndegen = np.asarray(ndegen)
+        # Check the "sum rule"
+        tot = np.sum(1/np.asarray(ndegen))
+        assert tot - np.prod(mp_grid) < 1e-8, "Error in finding Wigner-Seitz points!!!"
+        
+        return ndegen, irvec, rpt_origin 
+    
+    def get_hamiltonian_kpts(self):
+        '''Get the Hamiltonian in k-space, this should be identical to Fock matrix from PySCF'''
+        
+        assert self.U_matrix is not None, "You must wannierize first, then you can run this function"     
+        eigenvals_in_window = []            
+        for k_id in range(self.num_kpts_loc):
+            mo_included = self.mo_energy_kpts[k_id][self.band_included_list]
+            mo_in_window = mo_included[self.lwindow[k_id]]
+            eigenvals_in_window.append(mo_in_window)
+
+        rotation_mat = lib.einsum('ktm,kst->kms', self.U_matrix_opt, self.U_matrix) 
+        hamiltonian_kpts = lib.einsum('kmt,km,kms->kts', rotation_mat.conj(), eigenvals_in_window, rotation_mat) 
+        return hamiltonian_kpts
+        
+    def get_hamiltonian_Rs(self, Rs):
+        '''Get the R-space Hamiltonian H(R0, R) centered at R0 or the first R in Rs list
+        '''
+        
+        assert self.U_matrix is not None, "You must wannierize first, then you can run this function" 
+        nkpts = self.kpt_latt_loc.shape[0]
+        hamiltonian_kpts = self.get_hamiltonian_kpts()
+        
+        # Find the center either R(0,0,0) or the first R in the Rs list
+        ngrid = len(Rs)
+        center = np.arange(ngrid)[(np.asarray(Rs)**2).sum(axis=1) < 1e-10]
+        if center.shape[0] == 1:
+            center = center[0]
+        else:
+            center = 0
+
+        # The phase factor is computed using the exp(1j*R.dot(k)) rather than exp(-1j*R.dot(k)) in wannier90
+        phase = 1/np.sqrt(nkpts) * np.exp(1j* 2*np.pi * np.dot(Rs, self.kpt_latt_loc.T))
+        hamiltonian_R0 = lib.einsum('k,kuv,Rk->Ruv', phase[center], hamiltonian_kpts, phase.conj())
+        
+        return hamiltonian_R0
+        
+    def interpolate_band(self, frac_kpts, ws_search_size=[2,2,2], ws_distance_tol=1e-6):
+        ''' Interpolate the band structure using the Slater-Koster scheme
+            Return:
+                eigenvalues and eigenvectors at the desired kpts
+        '''
+        
+        assert self.U_matrix is not None, "You must wannierize first, then you can run this function" 
+        ndegen, Rs, center = self.get_wigner_seitz_supercell(ws_search_size, ws_distance_tol)
+        hamiltonian_R0 = self.get_hamiltonian_Rs(Rs)
+        
+        # Interpolate H(kpts) at the desired k-pts
+        nkpts = frac_kpts.shape[0]
+        phase = np.exp(1j* 2*np.pi * np.dot(Rs, frac_kpts.T))
+        inter_hamiltonian_kpts = \
+        lib.einsum('k,R,Ruv,Rk->kuv', phase[center].conj(), 1/ndegen, hamiltonian_R0, phase) 
+        
+        # Diagonalize H(kpts) to get eigenvalues and eigenvector
+        eigvals, eigvecs = np.linalg.eigh(inter_hamiltonian_kpts)
+        idx_kpts = eigvals.argsort()
+        eigvals = np.asarray([eigvals[kpt][idx_kpts[kpt]] for kpt in range(nkpts)])
+        eigvecs = np.asarray([eigvecs[kpt][:,idx_kpts[kpt]] for kpt in range(nkpts)])
+
+        return eigvals, eigvecs
+        
+    def is_real(self, threshold=1.e-6):
+        '''
+        Fourier transform the mo coefficients to real space and check if it is real
+        '''
+
+        assert self.U_matrix is not None, "You must wannierize first, then you can run this function"     
+        eigenvecs_in_window = []            
+        for k_id in range(self.num_kpts_loc):
+            mo_included = self.mo_coeff_kpts[k_id][:,self.band_included_list]
+            mo_in_window = mo_included[:, self.lwindow[k_id]]
+            eigenvecs_in_window.append(mo_in_window)
+            
+        # Rotate the mo(kpts) into localized basis
+        rotation_mat = lib.einsum('ktm,kst->kms', self.U_matrix_opt, self.U_matrix) 
+        rotated_mo_coeff_kpts = lib.einsum('kum,kms->kus', eigenvecs_in_window, rotation_mat)
+        
+        # Fourier transform the localized mo
+        nkx, nky, nkz = self.mp_grid_loc
+        Ts = lib.cartesian_prod((np.arange(nkx), np.arange(nky), np.arange(nkz)))
+        nkpts = self.kpt_latt_loc.shape[0]
+        phase = 1/np.sqrt(nkpts) * np.exp(1j* 2*np.pi * np.dot(Ts, self.kpt_latt_loc.T))
+        mo_coeff_Rs = lib.einsum('k,kuv,Rk->Ruv', phase[0], rotated_mo_coeff_kpts, phase.conj()) 
+        
+        return mo_coeff_Rs.imag.max() < threshold
+        
+    def export_unk(self, grid=[50,50,50]):
         '''
         Export the periodic part of BF in a real space grid for plotting with wannier90
         '''    
@@ -572,16 +737,16 @@ class W90:
             if self.spin_up != None and self.spin_up == False : spin = '.2'
             kpt = self.cell.get_abs_kpts(self.kpt_latt_loc[k_id])    
             ao = numint.eval_ao(self.cell, grids_coor, kpt = kpt)
-            u_ao = np.einsum('x,xi->xi', np.exp(-1j*np.dot(grids_coor, kpt)), ao, optimize = True)
+            u_ao = lib.einsum('x,xi->xi', np.exp(-1j*np.dot(grids_coor, kpt)), ao)
             unk_file = FortranFile('UNK' + "%05d" % (k_id + 1) + spin, 'w')
             unk_file.write_record(np.asarray([grid[0], grid[1], grid[2], k_id + 1, self.num_bands_loc], dtype = np.int32))    
             mo_included = self.mo_coeff_kpts[k_id][:,self.band_included_list]        
-            u_mo = np.einsum('xi,in->xn', u_ao, mo_included, optimize = True)
+            u_mo = lib.einsum('xi,in->xn', u_ao, mo_included)
             for band in range(len(self.band_included_list)):    
                 unk_file.write_record(np.asarray(u_mo[:,band], dtype = np.complex128))                    
             unk_file.close()
 
-    def export_AME(self, grid = [50,50,50]):
+    def export_AME(self, grid=[50,50,50]):
         '''
         Export A_{m,n}^{\mathbf{k}} and M_{m,n}^{(\mathbf{k,b})} and \epsilon_{n}^(\mathbf{k})
         '''    
@@ -623,7 +788,7 @@ class W90:
                 for band in range(self.num_bands_loc):
                         f.write('    %d    %d    %22.18f\n' % (band+1, k_id+1, self.eigenvalues_loc[k_id,band]))
 
-    def get_wannier(self, supercell = [1,1,1], grid = [50,50,50]):
+    def get_wannier(self, supercell=[1,1,1], grid=[50,50,50]):
         '''
         Evaluate the MLWF using a periodic grid
         '''    
@@ -636,12 +801,12 @@ class W90:
         for k_id in range(self.num_kpts_loc):
             mo_included = self.mo_coeff_kpts[k_id][:,self.band_included_list]
             mo_in_window = self.lwindow[k_id]
-            C_opt = mo_included[:,mo_in_window].dot(self.U_matrix_opt[k_id].T)          
+            C_opt = mo_included[:,mo_in_window].dot(self.U_matrix_opt[k_id][ :, mo_in_window].T)          
             C_tildle = C_opt.dot(self.U_matrix[k_id].T)  
             kpt = kpts[k_id]
             ao = numint.eval_ao(self.cell, grids_coor, kpt = kpt)            
-            u_ao = np.einsum('x,xi->xi', np.exp(-1j*np.dot(grids_coor, kpt)), ao, optimize = True)   
-            u_mo.append(np.einsum('xi,in->xn', u_ao, C_tildle, optimize = True))      
+            u_ao = lib.einsum('x,xi->xi', np.exp(-1j*np.dot(grids_coor, kpt)), ao)   
+            u_mo.append(lib.einsum('xi,in->xn', u_ao, C_tildle))      
         
         u_mo = np.asarray(u_mo)
         WF0 = libwannier90.get_WF0s(self.kpt_latt_loc.shape[0],self.kpt_latt_loc, supercell, grid, u_mo)    
@@ -658,7 +823,17 @@ class W90:
             print('The maximum imag/real for wannier function ', WF_id,' : ', ratio_max)        
         return WF0
         
-    def plot_wf(self, outfile = 'MLWF', wf_list = None, supercell = [1,1,1], grid = [50,50,50]):
+    def get_guess_orb(self, frac_site=[0,0,0], l=0, mr=1, r=1, zona=1.0, x_axis=[1,0,0], z_axis=[0,0,1], supercell=[1,1,1], grid=[50,50,50]):
+        '''
+        Evaluate a guess orbital using a periodic uniform grid
+        '''    
+        grids_coor, weights = periodic_grid(self.cell, grid, supercell = supercell, order = 'C') 
+        frac_site = np.asarray(frac_site)
+        abs_site = frac_site.dot(self.real_lattice_loc) / param.BOHR                            
+        gr = g_r(grids_coor, abs_site, l, mr, r, zona, x_axis, z_axis, unit = 'B')
+        return gr
+        
+    def plot_wf(self, outfile='MLWF', wf_list=None, supercell=[1,1,1], grid=[50,50,50]):
         '''
         Export Wannier function at cell R
         xsf format: http://web.mit.edu/xcrysden_v1.5.60/www/XCRYSDEN/doc/XSF.html
@@ -680,7 +855,6 @@ class W90:
             assert wf_id in list(range(self.num_wann_loc))
             WF = WF0[:,wf_id].reshape(nx,ny,nz).real
 
-                                
             with open(outfile + '-' + str(wf_id) + '.xsf', 'w') as f:
                 f.write('Generated by the pyWannier90\n\n')        
                 f.write('CRYSTAL\n')
@@ -709,7 +883,53 @@ class W90:
                 for iz in range(nz):
                     for iy in range(ny):
                         f.write(fmt % tuple(WF[:,iy,iz].tolist()))                                        
-                f.write('END_DATAGRID_3D\nEND_BLOCK_DATAGRID_3D')                                                
+                f.write('END_DATAGRID_3D\nEND_BLOCK_DATAGRID_3D')      
+
+    def plot_guess_orbs(self, outfile='guess_orb', frac_site=[0,0,0], l=0, mr=1, r=1, zona=1.0, x_axis=[1,0,0], z_axis=[0,0,1], supercell=[1,1,1], grid=[50,50,50]):
+        '''
+        Export Wannier function at cell R
+        xsf format: http://web.mit.edu/xcrysden_v1.5.60/www/XCRYSDEN/doc/XSF.html
+        Attributes:
+            wf_list        : a list of MLWFs to plot
+            supercell    : a supercell used for plotting
+        '''    
+
+        grid = np.asarray(grid)
+        origin = np.asarray([-grid[i]*(supercell[i]//2)/grid[i] for i in range(3)]).dot(self.cell.lattice_vectors().T)* param.BOHR            
+        real_lattice_loc = (grid*supercell-1)/grid * self.cell.lattice_vectors() * param.BOHR    
+        nx, ny, nz = grid*supercell
+        guess_orb = self.get_guess_orb(frac_site=frac_site, l=l, mr=mr, r=r, zona=zona, x_axis=x_axis, z_axis=z_axis, supercell=supercell, grid=grid)
+        guess_orb = guess_orb.reshape(nx,ny,nz).real
+
+        with open(outfile + '.xsf', 'w') as f:
+            f.write('Generated by the pyWannier90\n\n')        
+            f.write('CRYSTAL\n')
+            f.write('PRIMVEC\n')    
+            for row in range(3):
+                f.write('%10.7f  %10.7f  %10.7f\n' % (self.real_lattice_loc[row,0], self.real_lattice_loc[row,1], \
+                self.real_lattice_loc[row,2]))    
+            f.write('CONVVEC\n')
+            for row in range(3):
+                f.write('%10.7f  %10.7f  %10.7f\n' % (self.real_lattice_loc[row,0], self.real_lattice_loc[row,1], \
+                self.real_lattice_loc[row,2]))    
+            f.write('PRIMCOORD\n')
+            f.write('%3d %3d\n' % (self.num_atoms_loc, 1))
+            for atom in range(len(self.atom_symbols_loc)):
+                f.write('%s  %7.7f  %7.7f  %7.7f\n' % (self.atom_symbols_loc[atom], self.atoms_cart_loc[atom][0], \
+                 self.atoms_cart_loc[atom][1], self.atoms_cart_loc[atom][2]))                
+            f.write('\n\n')            
+            f.write('BEGIN_BLOCK_DATAGRID_3D\n3D_field\nBEGIN_DATAGRID_3D_UNKNOWN\n')    
+            f.write('   %5d     %5d  %5d\n' % (nx, ny, nz))        
+            f.write('   %10.7f  %10.7f  %10.7f\n' % (origin[0],origin[1],origin[2]))
+            for row in range(3):
+                f.write('   %10.7f  %10.7f  %10.7f\n' % (real_lattice_loc[row,0], real_lattice_loc[row,1], \
+                real_lattice_loc[row,2]))    
+                
+            fmt = ' %13.5e' * nx + '\n'
+            for iz in range(nz):
+                for iy in range(ny):
+                    f.write(fmt % tuple(guess_orb[:,iy,iz].tolist()))                                        
+            f.write('END_DATAGRID_3D\nEND_BLOCK_DATAGRID_3D')                    
                 
             
 if __name__ == '__main__':

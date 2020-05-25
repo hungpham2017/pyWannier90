@@ -2,7 +2,7 @@
 # pyWannier90                           #                                
 # User defines the compiling parameters #
 #----------------START------------------#
-W90DIR =/panfs/roc/groups/6/gagliard/phamx494/wannier90-3.0.0
+W90DIR =/panfs/roc/groups/6/gagliard/phamx494/wannier90-3.1.0
 LIBDIR =/panfs/roc/groups/6/gagliard/phamx494/intel
 #LIBDIR =/panfs/roc/intel/x86_64/2018/parallel_studio_xe_msi/compilers_and_libraries_2018.0.128/linux
 USE_INTEL = yes
