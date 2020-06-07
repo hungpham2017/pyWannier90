@@ -633,24 +633,190 @@ class W90:
     
         irvec = np.asarray(irvec)
         ndegen = np.asarray(ndegen)
+        
         # Check the "sum rule"
         tot = np.sum(1/np.asarray(ndegen))
         assert tot - np.prod(mp_grid) < 1e-8, "Error in finding Wigner-Seitz points!!!"
         
         return ndegen, irvec, rpt_origin 
     
+    def R_wz_sc_(self, R_in, R0, ws_search_size=[2,2,2], ws_distance_tol=1e-6):
+        ''' 
+        TODO: document it
+        Ref: This is the replication of the R_wz_sc function of ws_distance.F90
+        '''
+        ndegenx = 8 #max number of unit cells that can touch in a single point (i.e.  vertex of cube)
+        R_bz = np.asarray(R_in)
+        R0 = np.asarray(R0)
+        shifts = np.zeros([ndegenx, 3])
+        R_out = np.zeros([ndegenx, 3])
+        
+        mod2_R_bz = np.sum((R_bz - R0)**2)
+        R_in_f = R_bz.dot(self.recip_lattice_loc.T / 2 / np.pi)
+        n1_range =  np.arange(-ws_search_size[0] - 1, ws_search_size[0] + 2)
+        n2_range =  np.arange(-ws_search_size[1] - 1, ws_search_size[1] + 2)
+        n3_range =  np.arange(-ws_search_size[2] - 1, ws_search_size[2] + 2)
+        x, y, z = np.meshgrid(n1_range, n2_range, n3_range)
+        n_list = np.vstack([z.flatten('F'), x.flatten('F'), y.flatten('F')]).T
+        trans_vecs = n_list * self.mp_grid_loc
+        
+        # First loop:
+        R_f = R_in_f + trans_vecs
+        R = R_f.dot(self.real_lattice_loc)
+        mod2_R = np.sum((R - R0)**2, axis=1)
+        if mod2_R.min() < mod2_R_bz: 
+            min_idx = np.argmin(mod2_R)
+            R_bz = R[min_idx]
+            mod2_R_bz = mod2_R.min()
+            shifts[:] = trans_vecs[min_idx]
+            
+        if mod2_R_bz < ws_distance_tol**2:  
+            ndeg = 1
+            R_out[0] = R0
+        
+        # Second loop:
+        R_in_f = R_bz.dot(self.recip_lattice_loc.T / 2 / np.pi)
+        R_f = R_in_f + trans_vecs
+        R = R_f.dot(self.real_lattice_loc)
+        mod2_R = np.sum((R - R0)**2, axis=1)
+        abs_diff = abs(np.sqrt(mod2_R) - np.sqrt(mod2_R_bz)) 
+        idx = abs_diff < ws_distance_tol
+        ndeg = idx.sum()
+        assert ndeg <= 8, "The degeneracy cannot be larger than 8"
+        R_out[:ndeg] = R[idx]
+        shifts[:ndeg] = shifts[:ndeg] + trans_vecs[idx]
+        
+        return ndeg, R_out, shifts
+        
+    def R_wz_sc(self, R_in, R0, ws_search_size=[2,2,2], ws_distance_tol=1e-6):
+        ''' 
+        TODO: document it
+        Ref: This is the replication of the R_wz_sc function of ws_distance.F90
+        '''
+        ndegenx = 8 #max number of unit cells that can touch in a single point (i.e.  vertex of cube)
+        R_bz = np.asarray(R_in).reshape(-1, 3)
+        nR = R_bz.shape[0]
+        R0 = np.asarray(R0)
+        ndeg = np.zeros([nR], dtype=np.int32)
+        ndeg_ = np.zeros([nR, ndegenx])
+        shifts = np.zeros([nR, ndegenx, 3])
+        R_out = np.zeros([nR, ndegenx, 3])
+        
+        mod2_R_bz = np.sum((R_bz - R0)**2, axis=1)
+        R_in_f = R_bz.dot(self.recip_lattice_loc.T / 2 / np.pi)
+        n1_range =  np.arange(-ws_search_size[0] - 1, ws_search_size[0] + 2)
+        n2_range =  np.arange(-ws_search_size[1] - 1, ws_search_size[1] + 2)
+        n3_range =  np.arange(-ws_search_size[2] - 1, ws_search_size[2] + 2)
+        x, y, z = np.meshgrid(n1_range, n2_range, n3_range)
+        n_list = np.vstack([z.flatten('F'), x.flatten('F'), y.flatten('F')]).T
+        trans_vecs = n_list * self.mp_grid_loc
+        
+        # First loop:
+        R_f = np.repeat(R_in_f[:,np.newaxis,:], trans_vecs.shape[0], axis=1) + trans_vecs
+        R = R_f.dot(self.real_lattice_loc)
+        mod2_R = np.sum((R - R0)**2, axis=2)
+        mod2_R_min = mod2_R.min(axis=1)
+        mod2_R_min_idx = np.argmin(mod2_R, axis=1)
+        idx = mod2_R_min < mod2_R_bz
+        R_bz[idx] = R[idx, mod2_R_min_idx[idx]]
+        mod2_R_bz[idx] = mod2_R_min[idx]
+        shifts_data = np.repeat(trans_vecs[np.newaxis,:,:], nR, axis=0)[idx, mod2_R_min_idx[idx]]
+        shifts[idx] = np.repeat(shifts_data[:,np.newaxis,:], ndegenx, axis=1)
+        
+        idx = mod2_R_bz < ws_distance_tol**2
+        ndeg[idx] = 1
+        R_out[idx, 0] = R0
+        
+        # Second loop:
+        R_in_f = R_bz.dot(self.recip_lattice_loc.T / 2 / np.pi)
+        R_f = np.repeat(R_in_f[:,np.newaxis,:], trans_vecs.shape[0], axis=1) + trans_vecs
+        R = R_f.dot(self.real_lattice_loc)
+        mod2_R = np.sum((R - R0)**2, axis=2)
+        mod2_R_bz = np.repeat(mod2_R_bz[:,np.newaxis], trans_vecs.shape[0], axis=1)
+        abs_diff = abs(np.sqrt(mod2_R) - np.sqrt(mod2_R_bz)) 
+        idx = abs_diff < ws_distance_tol
+        ndeg = idx.sum(axis=1)
+        assert (ndeg <= 8).all(), "The degeneracy cannot be larger than 8"
+        for i in range(nR):
+            R_out[i, :ndeg[i]] = R[i, idx[i]]
+            shifts[i, :ndeg[i]] = shifts[i, :ndeg[i]] + trans_vecs[idx[i]]
+            ndeg_[i, :ndeg[i]] = 1.0
+        
+        return ndeg_, ndeg, R_out, shifts
+        
+    def ws_translate_dist(self, irvec, ws_search_size=[2,2,2], ws_distance_tol=1e-6):
+        ''' 
+        TODO: document it
+        Ref: This is the replication of the ws_translate_dist function of ws_distance.F90
+        '''
+        nrpts = irvec.shape[0]
+        ndegenx = 8 #max number of unit cells that can touch in a single point (i.e.  vertex of cube)
+        num_wann = self.num_wann
+        assert ndegenx*num_wann*nrpts > 0, "Unexpected dimensions in ws_translate_dist"
+       
+        irvec_ = []
+        wann_centres_i = []
+        wann_centres_j = []
+        for i in range(3):
+            x, y, z = np.meshgrid(irvec[:,i], np.zeros(num_wann), np.zeros(num_wann), indexing='ij')
+            irvec_.append(x.flatten())
+            x, y, z = np.meshgrid(np.zeros(nrpts), self.wann_centres[:,i], np.zeros(num_wann), indexing='ij')
+            wann_centres_i.append(y.flatten())
+            x, y, z = np.meshgrid(np.zeros(nrpts), np.zeros(num_wann), self.wann_centres[:,i], indexing='ij')
+            wann_centres_j.append(z.flatten())
+            
+        irvec_list = np.vstack(irvec_).T    
+        irvec_cart_list = irvec_list.dot(self.real_lattice_loc)
+        wann_centres_i_list = np.vstack(wann_centres_i).T        
+        wann_centres_j_list = np.vstack(wann_centres_j).T  
+        R_in = irvec_cart_list - wann_centres_i_list + wann_centres_j_list
+        
+        wdist_ndeg = []
+        wdist_ndeg_ = []
+        irdist_ws = []
+        crdist_ws = []
+        for i, R in enumerate(R_in):
+            ndeg, R_out, shifts = self.R_wz_sc_(R, [0,0,0], ws_search_size, ws_distance_tol)
+            tmp_frac = irvec_list[i] + shifts      
+            tmp_abs = tmp_frac.dot(self.real_lattice_loc)
+            tmp = np.zeros(ndegenx)
+            tmp[:ndeg] =  1.0
+            wdist_ndeg_.append(tmp)
+            wdist_ndeg.append(ndeg)
+            irdist_ws.append(tmp_frac)
+            crdist_ws.append(tmp_abs)
+          
+        wdist_ndeg = np.asarray(wdist_ndeg).reshape(nrpts, num_wann, num_wann) 
+        wdist_ndeg_ = np.asarray(wdist_ndeg_).reshape(nrpts, num_wann, num_wann, ndegenx) 
+        irdist_ws = np.asarray(irdist_ws).reshape(nrpts, num_wann, num_wann, ndegenx, 3) 
+        crdist_ws = np.asarray(crdist_ws).reshape(nrpts, num_wann, num_wann, ndegenx, 3) 
+        
+        # wdist_ndeg_, wdist_ndeg, R_out, shifts = self.R_wz_sc(R_in, [0,0,0], ws_search_size, ws_distance_tol)
+        # ndegenx = wdist_ndeg_.shape[1]
+        # irdist_ws = np.repeat(irvec_list[:,np.newaxis,:], ndegenx, axis=1) + shifts 
+        # crdist_ws = irdist_ws.dot(self.real_lattice_loc)
+
+        # wdist_ndeg = wdist_ndeg.reshape(nrpts, num_wann, num_wann) 
+        # wdist_ndeg_ = wdist_ndeg_.reshape(nrpts, num_wann, num_wann, ndegenx) 
+        # irdist_ws = irdist_ws.reshape(nrpts, num_wann, num_wann, ndegenx, 3) 
+        # crdist_ws = crdist_ws.reshape(nrpts, num_wann, num_wann, ndegenx, 3)      
+        
+        return wdist_ndeg, wdist_ndeg_, irdist_ws, crdist_ws
+        
     def get_hamiltonian_kpts(self):
         '''Get the Hamiltonian in k-space, this should be identical to Fock matrix from PySCF'''
-        
+
         assert self.U_matrix is not None, "You must wannierize first, then you can run this function"     
         eigenvals_in_window = []            
         for k_id in range(self.num_kpts_loc):
             mo_included = self.mo_energy_kpts[k_id][self.band_included_list]
-            mo_in_window = mo_included[self.lwindow[k_id]]
-            eigenvals_in_window.append(mo_in_window)
+            orbs_in_win = self.lwindow[k_id]
+            mo_in_window = mo_included[orbs_in_win]
+            U_matrix_opt = self.U_matrix_opt[k_id][ :, orbs_in_win].T
+            eigenvals = lib.einsum('m,mo,mo->o', mo_in_window, U_matrix_opt.conj(), U_matrix_opt)
+            eigenvals_in_window.append(eigenvals)
 
-        rotation_mat = lib.einsum('ktm,kst->kms', self.U_matrix_opt, self.U_matrix) 
-        hamiltonian_kpts = lib.einsum('kmt,km,kms->kts', rotation_mat.conj(), eigenvals_in_window, rotation_mat) 
+        hamiltonian_kpts = lib.einsum('kso,ko,kto->kst', self.U_matrix.conj(), eigenvals_in_window, self.U_matrix)  
         return hamiltonian_kpts
         
     def get_hamiltonian_Rs(self, Rs):
@@ -671,11 +837,11 @@ class W90:
 
         # The phase factor is computed using the exp(1j*R.dot(k)) rather than exp(-1j*R.dot(k)) in wannier90
         phase = 1/np.sqrt(nkpts) * np.exp(1j* 2*np.pi * np.dot(Rs, self.kpt_latt_loc.T))
-        hamiltonian_R0 = lib.einsum('k,kuv,Rk->Ruv', phase[center], hamiltonian_kpts, phase.conj())
-        
+        hamiltonian_R0 = lib.einsum('k,kst,Rk->Rst', phase[center], hamiltonian_kpts, phase.conj())
+       
         return hamiltonian_R0
-        
-    def interpolate_band(self, frac_kpts, ws_search_size=[2,2,2], ws_distance_tol=1e-6):
+    
+    def interpolate_band(self, frac_kpts, use_ws_distance=True, ws_search_size=[2,2,2], ws_distance_tol=1e-6):
         ''' Interpolate the band structure using the Slater-Koster scheme
             Return:
                 eigenvalues and eigenvectors at the desired kpts
@@ -684,14 +850,21 @@ class W90:
         assert self.U_matrix is not None, "You must wannierize first, then you can run this function" 
         ndegen, Rs, center = self.get_wigner_seitz_supercell(ws_search_size, ws_distance_tol)
         hamiltonian_R0 = self.get_hamiltonian_Rs(Rs)
-        
+
         # Interpolate H(kpts) at the desired k-pts
-        nkpts = frac_kpts.shape[0]
-        phase = np.exp(1j* 2*np.pi * np.dot(Rs, frac_kpts.T))
-        inter_hamiltonian_kpts = \
-        lib.einsum('k,R,Ruv,Rk->kuv', phase[center].conj(), 1/ndegen, hamiltonian_R0, phase) 
+        if use_ws_distance:
+            wdist_ndeg, wdist_ndeg_, irdist_ws, crdist_ws = self.ws_translate_dist(Rs)
+            temp = lib.einsum('Rstix,kx->Rstik', irdist_ws, frac_kpts)
+            phase = lib.einsum('Rstik,Rsti->Rstk', np.exp(1j* 2*np.pi * temp), wdist_ndeg_)
+            inter_hamiltonian_kpts = \
+            lib.einsum('R,Rst,stk,Rst,Rstk->kst', 1/ndegen, 1/wdist_ndeg, phase[center].conj(), hamiltonian_R0, phase)      
+        else:
+            phase = np.exp(1j* 2*np.pi * np.dot(Rs, frac_kpts.T))
+            inter_hamiltonian_kpts = \
+            lib.einsum('R,k,Rst,Rk->kst', 1/ndegen, phase[center].conj(), hamiltonian_R0, phase) 
         
         # Diagonalize H(kpts) to get eigenvalues and eigenvector
+        nkpts = frac_kpts.shape[0]
         eigvals, eigvecs = np.linalg.eigh(inter_hamiltonian_kpts)
         idx_kpts = eigvals.argsort()
         eigvals = np.asarray([eigvals[kpt][idx_kpts[kpt]] for kpt in range(nkpts)])
@@ -708,19 +881,19 @@ class W90:
         eigenvecs_in_window = []            
         for k_id in range(self.num_kpts_loc):
             mo_included = self.mo_coeff_kpts[k_id][:,self.band_included_list]
-            mo_in_window = mo_included[:, self.lwindow[k_id]]
-            eigenvecs_in_window.append(mo_in_window)
+            orbs_in_win = self.lwindow[k_id]
+            mo_in_window = mo_included[:, orbs_in_win].dot(self.U_matrix_opt[k_id][ :, orbs_in_win].T)
+            eigenvecs_in_window.append(mo_in_window) 
             
         # Rotate the mo(kpts) into localized basis
-        rotation_mat = lib.einsum('ktm,kst->kms', self.U_matrix_opt, self.U_matrix) 
-        rotated_mo_coeff_kpts = lib.einsum('kum,kms->kus', eigenvecs_in_window, rotation_mat)
+        rotated_mo_coeff_kpts = lib.einsum('kum,ksm->kus', eigenvecs_in_window, self.U_matrix)
         
         # Fourier transform the localized mo
         nkx, nky, nkz = self.mp_grid_loc
         Ts = lib.cartesian_prod((np.arange(nkx), np.arange(nky), np.arange(nkz)))
         nkpts = self.kpt_latt_loc.shape[0]
         phase = 1/np.sqrt(nkpts) * np.exp(1j* 2*np.pi * np.dot(Ts, self.kpt_latt_loc.T))
-        mo_coeff_Rs = lib.einsum('k,kuv,Rk->Ruv', phase[0], rotated_mo_coeff_kpts, phase.conj()) 
+        mo_coeff_Rs = lib.einsum('k,kus,Rk->Rus', phase[0], rotated_mo_coeff_kpts, phase.conj()) 
         
         return mo_coeff_Rs.imag.max() < threshold
         
