@@ -318,7 +318,9 @@ class W90:
             nao_kpts.append(mo_energy.shape[0])
             
         self.num_bands_tot = np.min(nao_kpts)
-        print('Number of bands: ', self.num_bands_tot) 
+        if self.num_bands_tot < cell.nao_nr():
+            print('The number of bands at different k-point are not the same. The first %d bands are used.' % (self.num_bands_tot) )
+        
         self.num_kpts_loc = self.kmf.kpts.shape[0]
         self.mp_grid_loc = mp_grid
         assert self.num_kpts_loc == np.asarray(self.mp_grid_loc).prod()
