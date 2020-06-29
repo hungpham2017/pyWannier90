@@ -8,9 +8,9 @@ email: pqh3.14@gmail.com
 # The path for the libwannier90 library
 W90LIB = '/panfs/roc/groups/6/gagliard/phamx494/pyWannier90/src'
 
+import os, time
 import numpy as np
-import scipy
-import cmath, os
+from scipy.io import FortranFile
 import pyscf.data.nist as param
 from pyscf import lib
 from pyscf.pbc import df
@@ -264,7 +264,6 @@ def theta_lmr(l, mr, cost, phi):
 
     return theta_lmr
     
-
 def g_r(grids_coor, site, l, mr, r, zona, x_axis=[1,0,0], z_axis=[0,0,1], unit='B'):
     '''
     Evaluate the projection function g(r) or \Theta_{l,m_r}(\theta,\phi) on a grid
@@ -300,7 +299,152 @@ def g_r(grids_coor, site, l, mr, r, zona, x_axis=[1,0,0], z_axis=[0,0,1], unit='
     
     return theta_lmr(l, mr, cost, phi) * R_r(r_norm * unit_conv, r = r, zona = zona)
     
+def get_wigner_seitz_supercell(w90, ws_search_size=[2,2,2], ws_distance_tol=1e-6):
+    '''
+    Return a grid that contains all the lattice within the Wigner-Seitz supercell
+    Ref: the hamiltonian_wigner_seitz(count_pts) in wannier90/src/hamittonian.F90
+    '''
     
+    real_metric = w90.real_lattice_loc.T @ w90.real_lattice_loc
+    dist_dim = np.prod(2 * (np.asarray(ws_search_size) + 1) + 1)
+    ndegen = []
+    irvec = []
+    mp_grid = np.asarray(w90.mp_grid_loc)
+    n1_range =  np.arange(-ws_search_size[0] * mp_grid[0], ws_search_size[0]*mp_grid[0] + 1)
+    n2_range =  np.arange(-ws_search_size[1] * mp_grid[1], ws_search_size[1]*mp_grid[1] + 1)
+    n3_range =  np.arange(-ws_search_size[2] * mp_grid[2], ws_search_size[2]*mp_grid[2] + 1)
+    x, y, z = np.meshgrid(n1_range, n2_range, n3_range)
+    n_list = np.vstack([z.flatten('F'), x.flatten('F'), y.flatten('F')]).T
+    i1 = np.arange(- ws_search_size[0] - 1, ws_search_size[0] + 2)
+    i2 = np.arange(- ws_search_size[1] - 1, ws_search_size[1] + 2)
+    i3 = np.arange(- ws_search_size[2] - 1, ws_search_size[2] + 2)
+    x, y, z = np.meshgrid(i1, i2, i3)
+    i_list = np.vstack([z.flatten('F'), x.flatten('F'), y.flatten('F')]).T
+
+    nrpts = 0
+    for n in n_list: 
+        # Calculate |r-R|^2
+        ndiff = n - i_list * mp_grid
+        dist = (ndiff @ real_metric @ ndiff.T).diagonal()
+        
+        dist_min = dist.min()
+        if abs(dist[(dist_dim + 1)//2 -1] - dist_min) < ws_distance_tol**2:
+            temp = 0
+            for i in range(0, dist_dim):
+                if (abs(dist[i] - dist_min) < ws_distance_tol**2):
+                    temp = temp + 1
+            ndegen.append(temp)
+            irvec.append(n.tolist())
+            if (n**2).sum() < 1.e-10: rpt_origin = nrpts
+            nrpts = nrpts + 1
+
+    irvec = np.asarray(irvec)
+    ndegen = np.asarray(ndegen)
+    
+    # Check the "sum rule"
+    tot = np.sum(1/np.asarray(ndegen))
+    assert tot - np.prod(mp_grid) < 1e-8, "Error in finding Wigner-Seitz points!!!"
+    
+    return ndegen, irvec, rpt_origin 
+    
+def R_wz_sc(w90, R_in, R0, ws_search_size=[2,2,2], ws_distance_tol=1e-6):
+    ''' 
+    TODO: document it
+    Ref: This is the replication of the R_wz_sc function of ws_distance.F90
+    '''
+    ndegenx = 8 #max number of unit cells that can touch in a single point (i.e.  vertex of cube)
+    R_bz = np.asarray(R_in).reshape(-1, 3)
+    nR = R_bz.shape[0]
+    R0 = np.asarray(R0)
+    ndeg = np.zeros([nR], dtype=np.int32)
+    ndeg_ = np.zeros([nR, ndegenx])
+    shifts = np.zeros([nR, ndegenx, 3])
+    R_out = np.zeros([nR, ndegenx, 3])
+    
+    mod2_R_bz = np.sum((R_bz - R0)**2, axis=1)
+    R_in_f = R_bz.dot(w90.recip_lattice_loc.T / 2 / np.pi)
+    n1_range =  np.arange(-ws_search_size[0] - 1, ws_search_size[0] + 2)
+    n2_range =  np.arange(-ws_search_size[1] - 1, ws_search_size[1] + 2)
+    n3_range =  np.arange(-ws_search_size[2] - 1, ws_search_size[2] + 2)
+    x, y, z = np.meshgrid(n1_range, n2_range, n3_range)
+    n_list = np.vstack([z.flatten('F'), x.flatten('F'), y.flatten('F')]).T
+    trans_vecs = n_list * w90.mp_grid_loc
+    
+    # First loop:
+    R_f = np.repeat(R_in_f[:,np.newaxis,:], trans_vecs.shape[0], axis=1) + trans_vecs
+    R = R_f.dot(w90.real_lattice_loc)
+    mod2_R = np.sum((R - R0)**2, axis=2)
+    mod2_R_min = mod2_R.min(axis=1)
+    mod2_R_min_idx = np.argmin(mod2_R, axis=1)
+    idx = mod2_R_min < mod2_R_bz
+    R_bz[idx] = R[idx, mod2_R_min_idx[idx]]
+    mod2_R_bz[idx] = mod2_R_min[idx]
+    shifts_data = np.repeat(trans_vecs[np.newaxis,:,:], nR, axis=0)[idx, mod2_R_min_idx[idx]]
+    shifts[idx] = np.repeat(shifts_data[:,np.newaxis,:], ndegenx, axis=1)
+    
+    idx = mod2_R_bz < ws_distance_tol**2
+    ndeg[idx] = 1
+    R_out[idx, 0] = R0
+    
+    # Second loop:
+    R_in_f = R_bz.dot(w90.recip_lattice_loc.T / 2 / np.pi)
+    R_f = np.repeat(R_in_f[:,np.newaxis,:], trans_vecs.shape[0], axis=1) + trans_vecs
+    R = R_f.dot(w90.real_lattice_loc)
+    mod2_R = np.sum((R - R0)**2, axis=2)
+    mod2_R_bz = np.repeat(mod2_R_bz[:,np.newaxis], trans_vecs.shape[0], axis=1)
+    abs_diff = abs(np.sqrt(mod2_R) - np.sqrt(mod2_R_bz)) 
+    idx = abs_diff < ws_distance_tol
+    ndeg = idx.sum(axis=1)
+    assert (ndeg <= 8).all(), "The degeneracy cannot be larger than 8"
+    for i in range(nR):
+        R_out[i, :ndeg[i]] = R[i, idx[i]]
+        shifts[i, :ndeg[i]] = shifts[i, :ndeg[i]] + trans_vecs[idx[i]]
+        ndeg_[i, :ndeg[i]] = 1.0
+    
+    return ndeg_, ndeg, R_out, shifts
+    
+def ws_translate_dist(w90, irvec, ws_search_size=[2,2,2], ws_distance_tol=1e-6):
+    ''' 
+    TODO: document it
+    Ref: This is the replication of the ws_translate_dist function of ws_distance.F90
+    '''
+    nrpts = irvec.shape[0]
+    ndegenx = 8 #max number of unit cells that can touch in a single point (i.e.  vertex of cube)
+    num_wann = w90.num_wann
+    assert ndegenx*num_wann*nrpts > 0, "Unexpected dimensions in ws_translate_dist"
+   
+    irvec_ = []
+    wann_centres_i = []
+    wann_centres_j = []
+    for i in range(3):
+        x, y, z = np.meshgrid(irvec[:,i], np.zeros(num_wann), np.zeros(num_wann), indexing='ij')
+        irvec_.append(x.flatten())
+        x, y, z = np.meshgrid(np.zeros(nrpts), np.zeros(num_wann), w90.wann_centres[:,i], indexing='ij')
+        wann_centres_i.append(z.flatten())
+        x, y, z = np.meshgrid(np.zeros(nrpts), w90.wann_centres[:,i], np.zeros(num_wann), indexing='ij')
+        wann_centres_j.append(y.flatten())
+
+        
+    irvec_list = np.vstack(irvec_).T    
+    irvec_cart_list = irvec_list.dot(w90.real_lattice_loc)
+    wann_centres_i_list = np.vstack(wann_centres_i).T        
+    wann_centres_j_list = np.vstack(wann_centres_j).T  
+    R_in = irvec_cart_list - wann_centres_i_list + wann_centres_j_list
+    wdist_ndeg_, wdist_ndeg, R_out, shifts = w90.R_wz_sc(R_in, [0,0,0], ws_search_size, ws_distance_tol)
+    ndegenx = wdist_ndeg_.shape[1]
+    irdist_ws = np.repeat(irvec_list[:,np.newaxis,:], ndegenx, axis=1) + shifts 
+    crdist_ws = irdist_ws.dot(w90.real_lattice_loc)
+
+    # Reformat the matrices for the computational convenience in lib.einsum
+    wdist_ndeg = wdist_ndeg.reshape(nrpts, num_wann, num_wann) 
+    wdist_ndeg_ = wdist_ndeg_.reshape(nrpts, num_wann, num_wann, ndegenx).transpose(3,0,1,2)
+    irdist_ws = irdist_ws.reshape(nrpts, num_wann, num_wann, ndegenx, 3).transpose(3,0,1,2,4) 
+    crdist_ws = crdist_ws.reshape(nrpts, num_wann, num_wann, ndegenx, 3).transpose(3,0,1,2,4)      
+    
+    return wdist_ndeg, wdist_ndeg_, irdist_ws, crdist_ws
+    
+    
+'''Main class of pyWannier90'''
 class W90:
     def __init__(self, kmf, cell, mp_grid, num_wann, gamma=False, spinors=False, spin_up=None, other_keywords=None):
         
@@ -342,7 +486,7 @@ class W90:
         self.nn_list = None 
         self.proj_site = None
         self.proj_l = None
-        proj_m = None
+        self.proj_m = None
         self.proj_radial = None
         self.proj_z = None 
         self.proj_x = None
@@ -385,15 +529,20 @@ class W90:
                 self.mo_energy_kpts.append(self.kmf.mo_energy_kpts[kpt][:self.num_bands_tot])
                 self.mo_coeff_kpts.append(self.kmf.mo_coeff_kpts[kpt][:,:self.num_bands_tot])    
             
-    def kernel(self):
+    def kernel(self, external_AME=None):
         '''
         Main kernel for pyWannier90
         '''    
         self.make_win()
         self.setup()
-        self.M_matrix_loc = self.get_M_mat()
-        self.A_matrix_loc = self.get_A_mat()        
-        self.eigenvalues_loc = self.get_epsilon_mat()    
+        if external_AME is not None:
+            self.M_matrix_loc = self.read_M_mat(external_AME + '.mmn')
+            self.A_matrix_loc = self.read_A_mat(external_AME + '.amn')      
+            self.eigenvalues_loc = self.read_epsilon_mat(external_AME + '.eig') 
+        else:
+            self.M_matrix_loc = self.get_M_mat()
+            self.A_matrix_loc = self.get_A_mat()        
+            self.eigenvalues_loc = self.get_epsilon_mat()  
         self.run()
     
     def make_win(self):
@@ -402,7 +551,7 @@ class W90:
         '''        
         
         win_file = open('wannier90.win', "w")
-        win_file.write('! Basic input generated by the pyWannier90\n')
+        win_file.write('! Basic input generated by the pyWannier90. Date: %s\n' % (time.ctime())) 
         win_file.write('\n')
         win_file.write('num_bands       = %d\n' % (self.num_bands_tot))
         win_file.write('num_wann       = %d\n' % (self.num_wann))
@@ -541,6 +690,21 @@ class W90:
             
         return np.asarray(self.mo_energy_kpts, dtype = np.float64)[:,self.band_included_list] * param.HARTREE2EV
         
+    def read_epsilon_mat(self, filename=None):
+        '''
+        Read the eigenvalues matrix: \epsilon_{n}^(\mathbf{k})
+        '''
+        if filename is None: filename = 'wannier90.eig'
+        assert os.path.exists(filename), "Cannot find " + filename
+        with open(filename, 'r') as f:
+            data = f.read()
+            temp = np.float64(data.split()).reshape(-1, 3)
+            nbands = int(temp[:,0].max())
+            nkpts = int(temp[:,1].max())
+            eigenvals = temp[:,2].reshape(nkpts, nbands)
+        
+        return eigenvals
+        
     def setup(self):
         '''
         Execute the Wannier90_setup
@@ -604,217 +768,10 @@ class W90:
         self.wann_centres = wann_centres.real
         self.wann_spreads = wann_spreads.real
         self.spread = spread.real
-    
-    def get_wigner_seitz_supercell(self, ws_search_size=[2,2,2], ws_distance_tol=1e-6):
-        '''
-        Return a grid that contains all the lattice within the Wigner-Seitz supercell
-        Ref: the hamiltonian_wigner_seitz(count_pts) in wannier90/src/hamittonian.F90
-        '''
-        
-        real_metric = self.real_lattice_loc.T @ self.real_lattice_loc
-        dist_dim = np.prod(2 * (np.asarray(ws_search_size) + 1) + 1)
-        ndegen = []
-        irvec = []
-        mp_grid = np.asarray(self.mp_grid_loc)
-        n1_range =  np.arange(-ws_search_size[0] * mp_grid[0], ws_search_size[0]*mp_grid[0] + 1)
-        n2_range =  np.arange(-ws_search_size[1] * mp_grid[1], ws_search_size[1]*mp_grid[1] + 1)
-        n3_range =  np.arange(-ws_search_size[2] * mp_grid[2], ws_search_size[2]*mp_grid[2] + 1)
-        x, y, z = np.meshgrid(n1_range, n2_range, n3_range)
-        n_list = np.vstack([z.flatten('F'), x.flatten('F'), y.flatten('F')]).T
-        i1 = np.arange(- ws_search_size[0] - 1, ws_search_size[0] + 2)
-        i2 = np.arange(- ws_search_size[1] - 1, ws_search_size[1] + 2)
-        i3 = np.arange(- ws_search_size[2] - 1, ws_search_size[2] + 2)
-        x, y, z = np.meshgrid(i1, i2, i3)
-        i_list = np.vstack([z.flatten('F'), x.flatten('F'), y.flatten('F')]).T
-
-        nrpts = 0
-        for n in n_list: 
-            # Calculate |r-R|^2
-            ndiff = n - i_list * mp_grid
-            dist = (ndiff @ real_metric @ ndiff.T).diagonal()
-            
-            dist_min = dist.min()
-            if abs(dist[(dist_dim + 1)//2 -1] - dist_min) < ws_distance_tol**2:
-                temp = 0
-                for i in range(0, dist_dim):
-                    if (abs(dist[i] - dist_min) < ws_distance_tol**2):
-                        temp = temp + 1
-                ndegen.append(temp)
-                irvec.append(n.tolist())
-                if (n**2).sum() < 1.e-10: rpt_origin = nrpts
-                nrpts = nrpts + 1
-    
-        irvec = np.asarray(irvec)
-        ndegen = np.asarray(ndegen)
-        
-        # Check the "sum rule"
-        tot = np.sum(1/np.asarray(ndegen))
-        assert tot - np.prod(mp_grid) < 1e-8, "Error in finding Wigner-Seitz points!!!"
-        
-        return ndegen, irvec, rpt_origin 
-    
-    def R_wz_sc_(self, R_in, R0, ws_search_size=[2,2,2], ws_distance_tol=1e-6):
-        ''' 
-        TODO: document it
-        Ref: This is the replication of the R_wz_sc function of ws_distance.F90
-        '''
-        ndegenx = 8 #max number of unit cells that can touch in a single point (i.e.  vertex of cube)
-        R_bz = np.asarray(R_in)
-        R0 = np.asarray(R0)
-        shifts = np.zeros([ndegenx, 3])
-        R_out = np.zeros([ndegenx, 3])
-        
-        mod2_R_bz = np.sum((R_bz - R0)**2)
-        R_in_f = R_bz.dot(self.recip_lattice_loc.T / 2 / np.pi)
-        n1_range =  np.arange(-ws_search_size[0] - 1, ws_search_size[0] + 2)
-        n2_range =  np.arange(-ws_search_size[1] - 1, ws_search_size[1] + 2)
-        n3_range =  np.arange(-ws_search_size[2] - 1, ws_search_size[2] + 2)
-        x, y, z = np.meshgrid(n1_range, n2_range, n3_range)
-        n_list = np.vstack([z.flatten('F'), x.flatten('F'), y.flatten('F')]).T
-        trans_vecs = n_list * self.mp_grid_loc
-        
-        # First loop:
-        R_f = R_in_f + trans_vecs
-        R = R_f.dot(self.real_lattice_loc)
-        mod2_R = np.sum((R - R0)**2, axis=1)
-        if mod2_R.min() < mod2_R_bz: 
-            min_idx = np.argmin(mod2_R)
-            R_bz = R[min_idx]
-            mod2_R_bz = mod2_R.min()
-            shifts[:] = trans_vecs[min_idx]
-            
-        if mod2_R_bz < ws_distance_tol**2:  
-            ndeg = 1
-            R_out[0] = R0
-        
-        # Second loop:
-        R_in_f = R_bz.dot(self.recip_lattice_loc.T / 2 / np.pi)
-        R_f = R_in_f + trans_vecs
-        R = R_f.dot(self.real_lattice_loc)
-        mod2_R = np.sum((R - R0)**2, axis=1)
-        abs_diff = abs(np.sqrt(mod2_R) - np.sqrt(mod2_R_bz)) 
-        idx = abs_diff < ws_distance_tol
-        ndeg = idx.sum()
-        assert ndeg <= 8, "The degeneracy cannot be larger than 8"
-        R_out[:ndeg] = R[idx]
-        shifts[:ndeg] = shifts[:ndeg] + trans_vecs[idx]
-        
-        return ndeg, R_out, shifts
-        
-    def R_wz_sc(self, R_in, R0, ws_search_size=[2,2,2], ws_distance_tol=1e-6):
-        ''' 
-        TODO: document it
-        Ref: This is the replication of the R_wz_sc function of ws_distance.F90
-        '''
-        ndegenx = 8 #max number of unit cells that can touch in a single point (i.e.  vertex of cube)
-        R_bz = np.asarray(R_in).reshape(-1, 3)
-        nR = R_bz.shape[0]
-        R0 = np.asarray(R0)
-        ndeg = np.zeros([nR], dtype=np.int32)
-        ndeg_ = np.zeros([nR, ndegenx])
-        shifts = np.zeros([nR, ndegenx, 3])
-        R_out = np.zeros([nR, ndegenx, 3])
-        
-        mod2_R_bz = np.sum((R_bz - R0)**2, axis=1)
-        R_in_f = R_bz.dot(self.recip_lattice_loc.T / 2 / np.pi)
-        n1_range =  np.arange(-ws_search_size[0] - 1, ws_search_size[0] + 2)
-        n2_range =  np.arange(-ws_search_size[1] - 1, ws_search_size[1] + 2)
-        n3_range =  np.arange(-ws_search_size[2] - 1, ws_search_size[2] + 2)
-        x, y, z = np.meshgrid(n1_range, n2_range, n3_range)
-        n_list = np.vstack([z.flatten('F'), x.flatten('F'), y.flatten('F')]).T
-        trans_vecs = n_list * self.mp_grid_loc
-        
-        # First loop:
-        R_f = np.repeat(R_in_f[:,np.newaxis,:], trans_vecs.shape[0], axis=1) + trans_vecs
-        R = R_f.dot(self.real_lattice_loc)
-        mod2_R = np.sum((R - R0)**2, axis=2)
-        mod2_R_min = mod2_R.min(axis=1)
-        mod2_R_min_idx = np.argmin(mod2_R, axis=1)
-        idx = mod2_R_min < mod2_R_bz
-        R_bz[idx] = R[idx, mod2_R_min_idx[idx]]
-        mod2_R_bz[idx] = mod2_R_min[idx]
-        shifts_data = np.repeat(trans_vecs[np.newaxis,:,:], nR, axis=0)[idx, mod2_R_min_idx[idx]]
-        shifts[idx] = np.repeat(shifts_data[:,np.newaxis,:], ndegenx, axis=1)
-        
-        idx = mod2_R_bz < ws_distance_tol**2
-        ndeg[idx] = 1
-        R_out[idx, 0] = R0
-        
-        # Second loop:
-        R_in_f = R_bz.dot(self.recip_lattice_loc.T / 2 / np.pi)
-        R_f = np.repeat(R_in_f[:,np.newaxis,:], trans_vecs.shape[0], axis=1) + trans_vecs
-        R = R_f.dot(self.real_lattice_loc)
-        mod2_R = np.sum((R - R0)**2, axis=2)
-        mod2_R_bz = np.repeat(mod2_R_bz[:,np.newaxis], trans_vecs.shape[0], axis=1)
-        abs_diff = abs(np.sqrt(mod2_R) - np.sqrt(mod2_R_bz)) 
-        idx = abs_diff < ws_distance_tol
-        ndeg = idx.sum(axis=1)
-        assert (ndeg <= 8).all(), "The degeneracy cannot be larger than 8"
-        for i in range(nR):
-            R_out[i, :ndeg[i]] = R[i, idx[i]]
-            shifts[i, :ndeg[i]] = shifts[i, :ndeg[i]] + trans_vecs[idx[i]]
-            ndeg_[i, :ndeg[i]] = 1.0
-        
-        return ndeg_, ndeg, R_out, shifts
-        
-    def ws_translate_dist(self, irvec, ws_search_size=[2,2,2], ws_distance_tol=1e-6):
-        ''' 
-        TODO: document it
-        Ref: This is the replication of the ws_translate_dist function of ws_distance.F90
-        '''
-        nrpts = irvec.shape[0]
-        ndegenx = 8 #max number of unit cells that can touch in a single point (i.e.  vertex of cube)
-        num_wann = self.num_wann
-        assert ndegenx*num_wann*nrpts > 0, "Unexpected dimensions in ws_translate_dist"
-       
-        irvec_ = []
-        wann_centres_i = []
-        wann_centres_j = []
-        for i in range(3):
-            x, y, z = np.meshgrid(irvec[:,i], np.zeros(num_wann), np.zeros(num_wann), indexing='ij')
-            irvec_.append(x.flatten())
-            x, y, z = np.meshgrid(np.zeros(nrpts), self.wann_centres[:,i], np.zeros(num_wann), indexing='ij')
-            wann_centres_i.append(y.flatten())
-            x, y, z = np.meshgrid(np.zeros(nrpts), np.zeros(num_wann), self.wann_centres[:,i], indexing='ij')
-            wann_centres_j.append(z.flatten())
-            
-        irvec_list = np.vstack(irvec_).T    
-        irvec_cart_list = irvec_list.dot(self.real_lattice_loc)
-        wann_centres_i_list = np.vstack(wann_centres_i).T        
-        wann_centres_j_list = np.vstack(wann_centres_j).T  
-        R_in = irvec_cart_list - wann_centres_i_list + wann_centres_j_list
-        
-        wdist_ndeg = []
-        wdist_ndeg_ = []
-        irdist_ws = []
-        crdist_ws = []
-        for i, R in enumerate(R_in):
-            ndeg, R_out, shifts = self.R_wz_sc_(R, [0,0,0], ws_search_size, ws_distance_tol)
-            tmp_frac = irvec_list[i] + shifts      
-            tmp_abs = tmp_frac.dot(self.real_lattice_loc)
-            tmp = np.zeros(ndegenx)
-            tmp[:ndeg] =  1.0
-            wdist_ndeg_.append(tmp)
-            wdist_ndeg.append(ndeg)
-            irdist_ws.append(tmp_frac)
-            crdist_ws.append(tmp_abs)
-          
-        wdist_ndeg = np.asarray(wdist_ndeg).reshape(nrpts, num_wann, num_wann) 
-        wdist_ndeg_ = np.asarray(wdist_ndeg_).reshape(nrpts, num_wann, num_wann, ndegenx) 
-        irdist_ws = np.asarray(irdist_ws).reshape(nrpts, num_wann, num_wann, ndegenx, 3) 
-        crdist_ws = np.asarray(crdist_ws).reshape(nrpts, num_wann, num_wann, ndegenx, 3) 
-        
-        # wdist_ndeg_, wdist_ndeg, R_out, shifts = self.R_wz_sc(R_in, [0,0,0], ws_search_size, ws_distance_tol)
-        # ndegenx = wdist_ndeg_.shape[1]
-        # irdist_ws = np.repeat(irvec_list[:,np.newaxis,:], ndegenx, axis=1) + shifts 
-        # crdist_ws = irdist_ws.dot(self.real_lattice_loc)
-
-        # wdist_ndeg = wdist_ndeg.reshape(nrpts, num_wann, num_wann) 
-        # wdist_ndeg_ = wdist_ndeg_.reshape(nrpts, num_wann, num_wann, ndegenx) 
-        # irdist_ws = irdist_ws.reshape(nrpts, num_wann, num_wann, ndegenx, 3) 
-        # crdist_ws = crdist_ws.reshape(nrpts, num_wann, num_wann, ndegenx, 3)      
-        
-        return wdist_ndeg, wdist_ndeg_, irdist_ws, crdist_ws
+  
+    get_wigner_seitz_supercell = get_wigner_seitz_supercell
+    R_wz_sc = R_wz_sc
+    ws_translate_dist = ws_translate_dist
         
     def get_hamiltonian_kpts(self):
         '''Get the Hamiltonian in k-space, this should be identical to Fock matrix from PySCF'''
@@ -832,13 +789,16 @@ class W90:
         hamiltonian_kpts = lib.einsum('kso,ko,kto->kst', self.U_matrix.conj(), eigenvals_in_window, self.U_matrix)  
         return hamiltonian_kpts
         
-    def get_hamiltonian_Rs(self, Rs):
+    def get_hamiltonian_Rs(self, Rs, ham_kpts=None):
         '''Get the R-space Hamiltonian H(R0, R) centered at R0 or the first R in Rs list
         '''
         
         assert self.U_matrix is not None, "You must wannierize first, then you can run this function" 
         nkpts = self.kpt_latt_loc.shape[0]
-        hamiltonian_kpts = self.get_hamiltonian_kpts()
+        if ham_kpts is not None:
+            hamiltonian_kpts = ham_kpts
+        else:
+            hamiltonian_kpts = self.get_hamiltonian_kpts()
         
         # Find the center either R(0,0,0) or the first R in the Rs list
         ngrid = len(Rs)
@@ -853,8 +813,8 @@ class W90:
         hamiltonian_R0 = lib.einsum('k,kst,Rk->Rst', phase[center], hamiltonian_kpts, phase.conj())
        
         return hamiltonian_R0
-    
-    def interpolate_band(self, frac_kpts, use_ws_distance=True, ws_search_size=[2,2,2], ws_distance_tol=1e-6):
+
+    def interpolate_ham_kpts(self, frac_kpts, ham_kpts=None, use_ws_distance=True, ws_search_size=[2,2,2], ws_distance_tol=1e-6):
         ''' Interpolate the band structure using the Slater-Koster scheme
             Return:
                 eigenvalues and eigenvectors at the desired kpts
@@ -862,20 +822,30 @@ class W90:
         
         assert self.U_matrix is not None, "You must wannierize first, then you can run this function" 
         ndegen, Rs, center = self.get_wigner_seitz_supercell(ws_search_size, ws_distance_tol)
-        hamiltonian_R0 = self.get_hamiltonian_Rs(Rs)
+        hamiltonian_R0 = self.get_hamiltonian_Rs(Rs, ham_kpts)
 
         # Interpolate H(kpts) at the desired k-pts
         if use_ws_distance:
             wdist_ndeg, wdist_ndeg_, irdist_ws, crdist_ws = self.ws_translate_dist(Rs)
-            temp = lib.einsum('Rstix,kx->Rstik', irdist_ws, frac_kpts)
-            phase = lib.einsum('Rstik,Rsti->Rstk', np.exp(1j* 2*np.pi * temp), wdist_ndeg_)
+            temp = lib.einsum('iRstx,kx->iRstk', irdist_ws, frac_kpts)
+            phase = lib.einsum('iRstk,iRst->Rstk', np.exp(1j* 2*np.pi * temp), wdist_ndeg_)
             inter_hamiltonian_kpts = \
-            lib.einsum('R,Rst,stk,Rst,Rstk->kst', 1/ndegen, 1/wdist_ndeg, phase[center].conj(), hamiltonian_R0, phase)      
+            lib.einsum('R,Rst,Rts,Rstk->kst', 1/ndegen, 1/wdist_ndeg, hamiltonian_R0, phase) 
         else:
             phase = np.exp(1j* 2*np.pi * np.dot(Rs, frac_kpts.T))
             inter_hamiltonian_kpts = \
-            lib.einsum('R,k,Rst,Rk->kst', 1/ndegen, phase[center].conj(), hamiltonian_R0, phase) 
+            lib.einsum('R,Rst,Rk->kst', 1/ndegen, hamiltonian_R0, phase) 
+
+        return inter_hamiltonian_kpts
         
+    def interpolate_band(self, frac_kpts, ham_kpts=None, use_ws_distance=True, ws_search_size=[2,2,2], ws_distance_tol=1e-6):
+        ''' Interpolate the band structure using the Slater-Koster scheme
+            Return:
+                eigenvalues and eigenvectors at the desired kpts
+        '''
+        
+        assert self.U_matrix is not None, "You must wannierize first, then you can run this function" 
+        inter_hamiltonian_kpts = self.interpolate_ham_kpts(frac_kpts, ham_kpts, use_ws_distance, ws_search_size, ws_distance_tol)
         # Diagonalize H(kpts) to get eigenvalues and eigenvector
         nkpts = frac_kpts.shape[0]
         eigvals, eigvecs = np.linalg.eigh(inter_hamiltonian_kpts)
@@ -915,7 +885,6 @@ class W90:
         Export the periodic part of BF in a real space grid for plotting with wannier90
         '''    
         
-        from scipy.io import FortranFile
         grids_coor, weights = periodic_grid(self.cell, grid, order = 'F')        
         
         for k_id in range(self.num_kpts_loc):
@@ -937,7 +906,7 @@ class W90:
         Export A_{m,n}^{\mathbf{k}} and M_{m,n}^{(\mathbf{k,b})} and \epsilon_{n}^(\mathbf{k})
         '''    
         
-        if self.A_matrix_loc.all() == None:
+        if self.A_matrix_loc is None:
             self.make_win()
             self.setup()
             self.M_matrix_loc = self.get_M_mat()
@@ -946,7 +915,7 @@ class W90:
             self.export_unk(self, grid = grid)
             
         with open('wannier90.mmn', 'w') as f:
-            f.write('Generated by the pyWannier90\n')        
+            f.write('Generated by the pyWannier90. Date: %s\n' % (time.ctime()))          
             f.write('    %d    %d    %d\n' % (self.num_bands_loc, self.num_kpts_loc, self.nntot_loc))
     
             for k_id in range(self.num_kpts_loc):
@@ -957,22 +926,21 @@ class W90:
                     f.write('    %d  %d    %d  %d  %d\n' % (k_id1, k_id2, nnn, nnm, nnl))
                     for m in range(self.num_bands_loc):
                         for n in range(self.num_bands_loc):
-                            f.write('    %22.18f  %22.18f\n' % (self.M_matrix_loc[k_id, nn,m,n].real, self.M_matrix_loc[k_id, nn,m,n].imag))
-                    
+                            f.write('    %22.18e  %22.18e\n' % (self.M_matrix_loc[k_id, nn,m,n].real, self.M_matrix_loc[k_id, nn,m,n].imag))       
     
         with open('wannier90.amn', 'w') as f:
-            f.write('    %d\n' % (self.num_bands_loc*self.num_kpts_loc*self.num_wann_loc))        
+            f.write('Generated by the pyWannier90. Date: %s\n' % (time.ctime()))             
             f.write('    %d    %d    %d\n' % (self.num_bands_loc, self.num_kpts_loc, self.num_wann_loc))
     
             for k_id in range(self.num_kpts_loc):
                 for ith_wann in range(self.num_wann_loc):
                     for band in range(self.num_bands_loc):
-                        f.write('    %d    %d    %d    %22.18f    %22.18f\n' % (band+1, ith_wann+1, k_id+1, self.A_matrix_loc[k_id,ith_wann,band].real, self.A_matrix_loc[k_id,ith_wann,band].imag))
+                        f.write('    %d    %d    %d    %22.18e    %22.18e\n' % (band+1, ith_wann+1, k_id+1, self.A_matrix_loc[k_id,ith_wann,band].real, self.A_matrix_loc[k_id,ith_wann,band].imag))
         
         with open('wannier90.eig', 'w') as f:
             for k_id in range(self.num_kpts_loc):
                 for band in range(self.num_bands_loc):
-                        f.write('    %d    %d    %22.18f\n' % (band+1, k_id+1, self.eigenvalues_loc[k_id,band]))
+                        f.write('    %d    %d    %22.18e\n' % (band+1, k_id+1, self.eigenvalues_loc[k_id,band]))
 
     def get_wannier(self, supercell=[1,1,1], grid=[50,50,50]):
         '''
@@ -1042,7 +1010,7 @@ class W90:
             WF = WF0[:,wf_id].reshape(nx,ny,nz).real
 
             with open(outfile + '-' + str(wf_id) + '.xsf', 'w') as f:
-                f.write('Generated by the pyWannier90\n\n')        
+                f.write('Generated by the pyWannier90. Date: %s\n\n' % (time.ctime())) 
                 f.write('CRYSTAL\n')
                 f.write('PRIMVEC\n')    
                 for row in range(3):
@@ -1115,66 +1083,37 @@ class W90:
             for iz in range(nz):
                 for iy in range(ny):
                     f.write(fmt % tuple(guess_orb[:,iy,iz].tolist()))                                        
-            f.write('END_DATAGRID_3D\nEND_BLOCK_DATAGRID_3D')                    
-                
+            f.write('END_DATAGRID_3D\nEND_BLOCK_DATAGRID_3D')                                    
             
 if __name__ == '__main__':
     import numpy as np
-    from pyscf import scf, gto
     from pyscf.pbc import gto as pgto
     from pyscf.pbc import scf as pscf
     import pywannier90
 
+    # build cell object
     cell = pgto.Cell()
-    cell.atom = '''
-     C                  3.17500000    3.17500000    3.17500000
-     H                  2.54626556    2.54626556    2.54626556
-     H                  3.80373444    3.80373444    2.54626556
-     H                  2.54626556    3.80373444    3.80373444
-     H                  3.80373444    2.54626556    3.80373444
-    '''
-    cell.basis = 'sto-3g'
-    cell.a = np.eye(3) * 6.35
-    cell.gs = [15] * 3
-    cell.verbose = 5
+    cell.a = [[0.0, 2.7155, 2.7155], [2.7155, 0.0, 2.7155], [2.7155, 2.7155, 0.0]]
+    cell.atom = [['Si',[0.0,0.0,0.0]], ['Si',[1.35775, 1.35775, 1.35775]]]
+    cell.basis = 'gth-dzv'
+    cell.pseudo = 'gth-pade'
+    cell.exp_to_discard = 0.1
     cell.build()
-
-
-    nk = [1, 1, 1]
-    abs_kpts = cell.make_kpts(nk)
-    kmf = pscf.KKS(cell, abs_kpts).mix_density_fit()
+    
+    # build and run scf object
+    kmesh = [3, 1, 1]
+    kpts = cell.make_kpts(kmesh)
+    kmf = pscf.KKS(cell, kpts)
     kmf.xc = 'pbe'
-    ekpt = kmf.run()
-    pywannier90.save_kmf(kmf, 'chk_mf')  # Save the wave function
-        
-    # Run pyWannier90 and plot WFs using pyWannier90        
-    num_wann = 4
-    keywords = \
-    '''
-    exclude_bands : 1,6-9
-    begin projections
-    C:sp3
-    end projections
-    '''
-    
-    # To use the saved wave function, replace kmf with 'chk_mf' 
-    w90 = pywannier90.W90(kmf, cell, nk, num_wann, other_keywords = keywords) 
-    w90.kernel()
-    w90.plot_wf(grid=[25,25,25], supercell = [1,1,1])
-    
-    # Run pyWannier90, export unk files, and plot WFs using Wannier90
-    w90.export_unk()
+    kmf.run()
+       
+    # build and run w90 object
+    num_wann = 8
     keywords = \
     '''
     begin projections
-    C:sp3
+    Si:sp3
     end projections
-    wannier_plot = True
-    wannier_plot_supercell = 1
     '''
-
-    w90 = pywannier90.W90(kmf, cell, nk, num_wann, other_keywords = keywords)
-    w90.make_win()
-    w90.setup()
-    w90.export_unk(grid = [25,25,25])
+    w90 = pywannier90.W90(kmf, cell, kmesh, num_wann, other_keywords=keywords)
     w90.kernel()
