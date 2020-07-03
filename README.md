@@ -3,30 +3,27 @@
 ![GitHub issues](https://img.shields.io/github/issues-raw/hungpham2017/pyWannier90.svg?color=crimson)
 
 # pyWannier90: A Python interface for wannier90
-[wannier90](http://www.wannier.org/) is a well-established package to construct maximally-localied Wannier functions (MLWFs) and perform MLWF-based analysis.
-wannier90 can be used in the library mode via pyWannier90 in conjunction with an ab initio code (e.g., PySCF, VASP) 
+[wannier90](http://www.wannier.org/) is a well-established package to construct maximally-localied Wannier functions (MLWFs) as well as to perform MLWF-based analysis.
+pyWannier90 uses the library-mode of wannier90 to perform the wannierization on the wave function obtained by PySCF or VASP.
 
 <img src="https://github.com/hungpham2017/pyWannier90/blob/master/doc/Si_sp3.png" width="500" align="middle">
 
 ## News:
 - pyWannier90 is now available for wannier90 community, check it out [here](http://www.wannier.org/download/).
-- pyWannier90 only supports wannier90-3.0.0 from now on. 
+- pyWannier90 only supports the wannier90 v3.*.*
 
-## Supported ab initio codes:
-- PySCF > 1.5 
+## pyWannier90 can use the wave function obtained by:
+- PySCF 1.5 and 
 - VASP via the [MCU package](https://hungpham2017.github.io/mcu/)
 
 ## Why pyWannier90?
-- If you would like to construct MLWFs from a PySCF calcultion.
-- pyWannier90 can construct MLWFs from a WAVECAR containing plane-wave coefficients.
-Hence, only one VASP calculation is needed to produce WAVECAR and no special compilation for VASP.
-VASP has its own interface (pw2wannier90.x) and must be compiled with this function turned on. 
-However, anytime one call wannier90 (for example using different initial guess), a SCF must be run.
-This is quite expensive and unneccessary. 
-
-## Future functions:
-- Topological analysis using MLWFs 
+- If you would like to construct MLWFs for the wave function obtained by [PySCF](https://github.com/pyscf/pyscf)
+- pyWannier90 for VASP can construct MLWFs using only the WAVECAR and vasprun.xml obtained by VASP.
+That means you won't need to rerun the VASP calculation everytime you change some wannierization parameters with the wannier90 build-in library (pw2wannier90.x).
+One should note that the MLWFs constructed by pyWannier90 may be not identical to that by VASP since only the pseudo wave function (WAVECAR) is used.
+However, I have not experienced any significant discrepancy between the two approaches. 
 
 ## How to cite?
 Please cite this paper when you use pyWannier90 code in your research:
-H. Q. Pham, M. R. Hermes, L. Gagliardi; Periodic Electronic Structure Calculations with the Density Matrix Embedding Theory, [**J. Chem. Theory Comput.**, **2019**](https://pubs.acs.org/doi/abs/10.1021/acs.jctc.9b00939), ASAP.
+- pyWannier90 for PySCF: Q. Sun et al.,Recent developments in the PySCF program package, [**J. Chem. Phys**](https://doi.org/10.1063/5.0006074), **2020**, Just Accepted
+- pyWannier90 for VASP: H. Q. Pham, MCU: a Multipurpose Python Library to Analyze the Electronic Wave Function of Solid-State Materials, Manuscript under preparation, [MCU package](https://hungpham2017.github.io/mcu/)
