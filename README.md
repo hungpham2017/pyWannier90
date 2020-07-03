@@ -10,7 +10,7 @@ pyWannier90 uses the library-mode of wannier90 to perform the wannierization on 
 
 ## News:
 - pyWannier90 is now available for wannier90 community, check it out [here](http://www.wannier.org/download/).
-- pyWannier90 only supports the wannier90 v3.*.*
+- pyWannier90 only supports the wannier90 v3.0.0 or newer.
 
 ## pyWannier90 can use the wave function obtained by:
 - PySCF 1.5 and 
