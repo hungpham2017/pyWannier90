@@ -23,6 +23,28 @@ That means you won't need to rerun the VASP calculation everytime you change som
 One should note that the MLWFs constructed by pyWannier90 may be not identical to that by VASP since only the pseudo wave function (WAVECAR) is used.
 However, I have not experienced any significant discrepancy between the two approaches. 
 
+## How to install libwannier90
+libwannier90 needs to be installed first before one can call pyWannier90 from the code of choice (PySCF or MCU).
+- Replace /wannier90-xxx/src/wannier_lib.F90 with /pyWannier90/src/wannier_lib.F90
+- Go to /wannier90-xxx, modify make.inc with your favorite compiler and important adding this line to it:
+	```
+	FCOPTS = -O3 -fPIC -g
+	```
+- Compile wannier90-xxx:
+	```
+	make & make lib
+	```
+- Go to /pyWannier90/src, modify Makefile and compile libwannier90:
+	```
+	make
+	```
+- Modify the path of libwannier90 in pyWannier90.py (in /pyscf/pbc/tools or in /mcu/wannier90)
+	
+- Test libwannier90 library:
+	```
+	python -c "import libwannier90"		#Should return nothing if the compilation was successful
+	```
+	
 ## How to cite?
 Please cite this paper when you use pyWannier90 code in your research:
 - pyWannier90 for PySCF: Q. Sun et al.,Recent developments in the PySCF program package, [**J. Chem. Phys**](https://doi.org/10.1063/5.0006074), **2020**, Just Accepted
