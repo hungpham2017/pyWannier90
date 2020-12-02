@@ -808,8 +808,7 @@ class W90:
         else:
             center = 0
 
-        # The phase factor is computed using the exp(1j*R.dot(k)) rather than exp(-1j*R.dot(k)) in wannier90
-        phase = 1/np.sqrt(nkpts) * np.exp(1j* 2*np.pi * np.dot(Rs, self.kpt_latt_loc.T))
+        phase = 1/np.sqrt(nkpts) * np.exp(-1j* 2*np.pi * np.dot(Rs, self.kpt_latt_loc.T))
         hamiltonian_R0 = lib.einsum('k,kst,Rk->Rst', phase[center], hamiltonian_kpts, phase.conj())
        
         return hamiltonian_R0
@@ -828,11 +827,11 @@ class W90:
         if use_ws_distance:
             wdist_ndeg, wdist_ndeg_, irdist_ws, crdist_ws = self.ws_translate_dist(Rs)
             temp = lib.einsum('iRstx,kx->iRstk', irdist_ws, frac_kpts)
-            phase = lib.einsum('iRstk,iRst->Rstk', np.exp(1j* 2*np.pi * temp), wdist_ndeg_)
+            phase = lib.einsum('iRstk,iRst->Rstk', np.exp(-1j* 2*np.pi * temp), wdist_ndeg_)
             inter_hamiltonian_kpts = \
-            lib.einsum('R,Rst,Rts,Rstk->kst', 1/ndegen, 1/wdist_ndeg, hamiltonian_R0, phase) 
+            lib.einsum('R,Rst,Rst,Rstk->kst', 1/ndegen, 1/wdist_ndeg, hamiltonian_R0, phase) 
         else:
-            phase = np.exp(1j* 2*np.pi * np.dot(Rs, frac_kpts.T))
+            phase = np.exp(-1j* 2*np.pi * np.dot(Rs, frac_kpts.T))
             inter_hamiltonian_kpts = \
             lib.einsum('R,Rst,Rk->kst', 1/ndegen, hamiltonian_R0, phase) 
 
@@ -875,7 +874,7 @@ class W90:
         nkx, nky, nkz = self.mp_grid_loc
         Ts = lib.cartesian_prod((np.arange(nkx), np.arange(nky), np.arange(nkz)))
         nkpts = self.kpt_latt_loc.shape[0]
-        phase = 1/np.sqrt(nkpts) * np.exp(1j* 2*np.pi * np.dot(Ts, self.kpt_latt_loc.T))
+        phase = 1/np.sqrt(nkpts) * np.exp(-1j* 2*np.pi * np.dot(Ts, self.kpt_latt_loc.T))
         mo_coeff_Rs = lib.einsum('k,kus,Rk->Rus', phase[0], rotated_mo_coeff_kpts, phase.conj()) 
         
         return mo_coeff_Rs.imag.max() < threshold
