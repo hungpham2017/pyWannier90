@@ -446,7 +446,7 @@ def ws_translate_dist(w90, irvec, ws_search_size=[2,2,2], ws_distance_tol=1e-6):
     
 '''Main class of pyWannier90'''
 class W90:
-    def __init__(self, kmf, cell, mp_grid, num_wann, gamma=False, spinors=False, spin_up=None, other_keywords=None):
+    def __init__(self, kmf, cell, mp_grid, num_wann, gamma=False, spinors=False, spin='up', other_keywords=None):
         
         if isinstance(kmf, str) == True:       
             self.kmf = load_kmf(kmf)
@@ -502,7 +502,7 @@ class W90:
         
         # Others
         self.use_bloch_phases = False
-        self.spin_up = spin_up
+        self.spin = spin
         self.mo_energy_kpts = []
         self.mo_coeff_kpts = []
         if np.asarray(kmf.mo_energy_kpts).ndim == 3:
@@ -514,14 +514,29 @@ class W90:
             self.num_bands_tot = np.min(nao_kpts)
             if self.num_bands_tot < cell.nao_nr():
                 print('The number of bands at different k-point are not the same. The first %d bands are used.' % (self.num_bands_tot))
-            if spin_up == True:
+            assert self.spin in ['up', 'down', 'mix'], "spin must be: 'up' or 'down' or 'mix'"
+            if spin == 'up':
                 for kpt in range(self.num_kpts_loc):
                     self.mo_energy_kpts.append(self.kmf.mo_energy_kpts[0][kpt][:self.num_bands_tot])
                     self.mo_coeff_kpts.append(self.kmf.mo_coeff_kpts[0][kpt][:,:self.num_bands_tot])     
-            else:
+            elif spin == 'down':
                 for kpt in range(self.num_kpts_loc):
                     self.mo_energy_kpts.append(self.kmf.mo_energy_kpts[1][kpt][:self.num_bands_tot])
-                    self.mo_coeff_kpts.append(self.kmf.mo_coeff_kpts[1][kpt][:,:self.num_bands_tot])                
+                    self.mo_coeff_kpts.append(self.kmf.mo_coeff_kpts[1][kpt][:,:self.num_bands_tot]) 
+            elif spin == 'mix':
+                from pyscf.pbc.scf import krohf
+                focka_fockb = kmf.get_fock()
+                dma_dmb = kmf.make_rdm1()
+                s_kpts = kmf.get_ovlp()
+                fock_kpts = krohf.get_roothaan_fock(focka_fockb, dma_dmb, s_kpts)
+                eig_kpts = []
+                mo_coeff_kpts = []
+                for k in range(self.num_kpts_loc):
+                    e, c = kmf._eigh(fock_kpts[k], s_kpts[k])
+                    eig_kpts.append(e)
+                    mo_coeff_kpts.append(c)                
+                self.mo_energy_kpts = np.asarray(eig_kpts)
+                self.mo_coeff_kpts = np.asarray(mo_coeff_kpts)
         else:
             # Collect the pyscf calculation info
             nao_kpts = []
@@ -893,7 +908,7 @@ class W90:
         
         for k_id in range(self.num_kpts_loc):
             spin = '.1'
-            if self.spin_up != None and self.spin_up == False : spin = '.2'
+            if self.spin == "down" or self.spin == "mix" : spin = '.2'
             kpt = self.cell.get_abs_kpts(self.kpt_latt_loc[k_id])    
             ao = numint.eval_ao(self.cell, grids_coor, kpt = kpt)
             u_ao = lib.einsum('x,xi->xi', np.exp(-1j*np.dot(grids_coor, kpt)), ao)
