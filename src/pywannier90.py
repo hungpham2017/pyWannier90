@@ -6,7 +6,7 @@ email: pqh3.14@gmail.com
 
 # This is the only place needed to be modified
 # The path for the libwannier90 library
-W90LIB = '/panfs/roc/groups/6/gagliard/phamx494/pyWannier90/src'
+W90LIB = '/burg/home/hqp2000/pyWannier90/src'
 
 import os, time
 import numpy as np
@@ -455,16 +455,7 @@ class W90:
         self.cell = cell
         self.num_wann = num_wann
         self.keywords = other_keywords
-
-        # Collect the pyscf calculation info
-        nao_kpts = []
-        for mo_energy in kmf.mo_energy_kpts:
-            nao_kpts.append(mo_energy.shape[0])
             
-        self.num_bands_tot = np.min(nao_kpts)
-        if self.num_bands_tot < cell.nao_nr():
-            print('The number of bands at different k-point are not the same. The first %d bands are used.' % (self.num_bands_tot) )
-        
         self.num_kpts_loc = self.kmf.kpts.shape[0]
         self.mp_grid_loc = mp_grid
         assert self.num_kpts_loc == np.asarray(self.mp_grid_loc).prod()
@@ -514,7 +505,15 @@ class W90:
         self.spin_up = spin_up
         self.mo_energy_kpts = []
         self.mo_coeff_kpts = []
-        if np.mod(self.cell.nelectron,2) !=0:
+        if np.asarray(kmf.mo_energy_kpts).ndim == 3:
+            # Collect the pyscf calculation info
+            nao_kpts = []
+            for mo_energy in kmf.mo_energy_kpts[0]:
+                nao_kpts.append(mo_energy.shape[0])        
+
+            self.num_bands_tot = np.min(nao_kpts)
+            if self.num_bands_tot < cell.nao_nr():
+                print('The number of bands at different k-point are not the same. The first %d bands are used.' % (self.num_bands_tot))
             if spin_up == True:
                 for kpt in range(self.num_kpts_loc):
                     self.mo_energy_kpts.append(self.kmf.mo_energy_kpts[0][kpt][:self.num_bands_tot])
@@ -524,7 +523,13 @@ class W90:
                     self.mo_energy_kpts.append(self.kmf.mo_energy_kpts[1][kpt][:self.num_bands_tot])
                     self.mo_coeff_kpts.append(self.kmf.mo_coeff_kpts[1][kpt][:,:self.num_bands_tot])                
         else:
-            
+            # Collect the pyscf calculation info
+            nao_kpts = []
+            for mo_energy in kmf.mo_energy_kpts:
+                nao_kpts.append(mo_energy.shape[0])        
+            self.num_bands_tot = np.min(nao_kpts)
+            if self.num_bands_tot < cell.nao_nr():
+                print('The number of bands at different k-point are not the same. The first %d bands are used.' % (self.num_bands_tot))
             for kpt in range(self.num_kpts_loc):
                 self.mo_energy_kpts.append(self.kmf.mo_energy_kpts[kpt][:self.num_bands_tot])
                 self.mo_coeff_kpts.append(self.kmf.mo_coeff_kpts[kpt][:,:self.num_bands_tot])    
