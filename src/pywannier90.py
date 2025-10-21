@@ -53,7 +53,91 @@ def load_kmf(chkfile):
             self.mo_coeff_kpts = kmf['mo_coeff_kpts']
     kmf = fake_kmf(kmf)
     return kmf
-    
+
+def get_WF0s_python(num_kpts, kpts, supercell, grid, u_mo):
+    """
+    Pure Python/NumPy implementation of get_WF0s (replaces C++ version)
+
+    Inverse Fourier transform from k-space to real-space for Wannier functions
+    WF(r) = sum_k exp(2*pi*i*k·r) * u_mo(k,r)
+
+    Parameters:
+    -----------
+    num_kpts : int
+        Number of k-points
+    kpts : ndarray (num_kpts, 3)
+        K-points in fractional coordinates
+    supercell : ndarray (3,)
+        Supercell size [ngs1, ngs2, ngs3]
+    grid : ndarray (3,)
+        Grid size per unit cell [ngx, ngy, ngz]
+    u_mo : ndarray (num_kpts, Ngrid, num_band)
+        MO coefficients at each k-point on grid
+
+    Returns:
+    --------
+    wann_func : ndarray (num_pts_total, num_band)
+        Wannier functions on real-space grid
+    """
+    import numpy as np
+
+    # Extract dimensions
+    Ngrid = u_mo.shape[1]
+    num_band = u_mo.shape[2]
+    ngs1, ngs2, ngs3 = supercell
+    ngx, ngy, ngz = grid
+
+    # Total grid points in supercell
+    num_pts1 = ngx * ngs1
+    num_pts2 = ngy * ngs2
+    num_pts3 = ngz * ngs3
+    num_pts_total = num_pts1 * num_pts2 * num_pts3
+
+    # Initialize output
+    wann_func = np.zeros((num_pts_total, num_band), dtype=np.complex128)
+
+    # Create grid indices for supercell
+    # Following C++ convention: range from -(ngs/2)*ng to ((ngs+1)/2)*ng
+    nxx_range = np.arange(-(ngs1//2)*ngx, ((ngs1+1)//2)*ngx)
+    nyy_range = np.arange(-(ngs2//2)*ngy, ((ngs2+1)//2)*ngy)
+    nzz_range = np.arange(-(ngs3//2)*ngz, ((ngs3+1)//2)*ngz)
+
+    # Loop over k-points
+    for kpt_idx in range(num_kpts):
+        kpt = kpts[kpt_idx]
+
+        # Create meshgrid for all supercell points
+        nxx_grid, nyy_grid, nzz_grid = np.meshgrid(nxx_range, nyy_range, nzz_range, indexing='ij')
+
+        # Flatten for easier manipulation
+        nxx_flat = nxx_grid.ravel()
+        nyy_flat = nyy_grid.ravel()
+        nzz_flat = nzz_grid.ravel()
+
+        # Map to reference unit cell indices (1-based like C++)
+        nx = nxx_flat % ngx
+        ny = nyy_flat % ngy
+        nz = nzz_flat % ngz
+        nx = np.where(nx < 1, nx + ngx, nx)
+        ny = np.where(ny < 1, ny + ngy, ny)
+        nz = np.where(nz < 1, nz + ngz, nz)
+
+        # Calculate linear index in reference grid (0-based for Python)
+        npoint = (nx - 1) * ngy * ngz + (ny - 1) * ngz + (nz - 1)
+
+        # Calculate phase factors: exp(2*pi*i * k·r)
+        scalfac = (kpt[0] * (nxx_flat - 1) / ngx +
+                   kpt[1] * (nyy_flat - 1) / ngy +
+                   kpt[2] * (nzz_flat - 1) / ngz)
+        phase = np.exp(2j * np.pi * scalfac)
+
+        # Add contribution from this k-point
+        # wann_func[supercell_idx, :] += phase * u_mo[kpt_idx, reference_idx, :]
+        for band_idx in range(num_band):
+            wann_func[:, band_idx] += phase * u_mo[kpt_idx, npoint, band_idx]
+
+    return wann_func
+
 def angle(v1, v2):
     '''
     Return the angle (in radiant between v1 and v2)
@@ -982,7 +1066,8 @@ class W90:
             u_mo.append(lib.einsum('xi,in->xn', u_ao, C_tildle))      
         
         u_mo = np.asarray(u_mo)
-        WF0 = libwannier90.get_WF0s(self.kpt_latt_loc.shape[0],self.kpt_latt_loc, supercell, grid, u_mo)    
+        # Use pure Python implementation instead of C++ for simplicity
+        WF0 = get_WF0s_python(self.kpt_latt_loc.shape[0], self.kpt_latt_loc, supercell, grid, u_mo)    
         
         # Fix the global phase following the pw2wannier90 procedure
         max_index = (WF0*WF0.conj()).real.argmax(axis=0)
